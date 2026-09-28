@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750">
+  <rect width="1200" height="750" fill="#0c1828"/>
+  <path d="M180 470h840c40 0 70-28 78-66l42-120c10-30-12-60-44-60H740l-70-90c-14-18-36-28-58-28H390c-28 0-54 16-66 40l-70 118H210c-36 0-62 32-54 66l24 140z" fill="#16324d"/>
+  <circle cx="360" cy="500" r="54" fill="#050a14" stroke="#00BCFE" stroke-width="10"/>
+  <circle cx="840" cy="500" r="54" fill="#050a14" stroke="#00BCFE" stroke-width="10"/>
+  <text x="600" y="640" text-anchor="middle" fill="#8ba0b8" font-family="Arial,sans-serif" font-size="28">Foto en preparación</text>
+</svg>
