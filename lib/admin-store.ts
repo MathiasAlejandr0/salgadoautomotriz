@@ -1,5 +1,6 @@
 import { MOCK_REVIEWS, MOCK_VEHICLES } from "@/lib/mock-data";
 import type { Review, VehicleWithImages } from "@/types/database";
+import { canUseMockFallback } from "@/lib/env";
 import { resolveVehicleImage } from "@/lib/images";
 
 export type StockStatus = "Disponible" | "En reserva" | "Vendido" | "Borrador";
@@ -35,6 +36,7 @@ function seedVehicles(): AdminVehicle[] {
 }
 
 function seedLeads(): AdminLead[] {
+  if (!canUseMockFallback()) return [];
   const first = MOCK_VEHICLES[0];
   return [
     {
@@ -79,17 +81,17 @@ export async function ensureAdminVehicles(): Promise<AdminVehicle[]> {
   if (vehicles) return vehicles;
   const { loadSalgadoCatalog } = await import("@/lib/inventory/catalog");
   const sheet = await loadSalgadoCatalog();
-  vehicles = asAdmin(sheet.length ? sheet : seedVehicles());
+  vehicles = asAdmin(sheet.length ? sheet : canUseMockFallback() ? seedVehicles() : []);
   return vehicles;
 }
 
 export function listAdminVehicles(): AdminVehicle[] {
-  if (!vehicles) vehicles = seedVehicles();
+  if (!vehicles) vehicles = [];
   return vehicles;
 }
 
 export function listAdminReviews(): Review[] {
-  if (!reviews) reviews = MOCK_REVIEWS.map((r) => ({ ...r }));
+  if (!reviews) reviews = canUseMockFallback() ? MOCK_REVIEWS.map((r) => ({ ...r })) : [];
   return reviews;
 }
 

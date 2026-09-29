@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Logo from "@/components/layout/Logo";
 import { formatCLP, slugify } from "@/lib/utils";
 import { calcCuota, pieMinimo } from "@/lib/financing";
@@ -56,6 +57,7 @@ const STATUS_CLASS: Record<StockStatus, string> = {
 };
 
 export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?: Tab }) {
+  const router = useRouter();
   const [active, setActive] = useState<Tab>(initialTab);
   const [vehicles, setVehicles] = useState<AdminVehicle[]>([]);
   const [leads, setLeads] = useState<AdminLead[]>([]);
@@ -73,12 +75,28 @@ export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    async function run() {
+      const [v, l, r] = await Promise.all([
+        fetch("/api/admin/vehicles").then((res) => (res.ok ? res.json() : { vehicles: [] })),
+        fetch("/api/admin/leads").then((res) => (res.ok ? res.json() : { leads: [] })),
+        fetch("/api/admin/reviews").then((res) => (res.ok ? res.json() : { reviews: [] })),
+      ]);
+      if (cancelled) return;
+      setVehicles(v.vehicles || []);
+      setLeads(l.leads || []);
+      setReviews(r.reviews || []);
+    }
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const logout = async () => {
     await fetch("/api/auth/signout", { method: "POST" }).catch(() => {});
-    window.location.href = "/admin/login";
+    router.push("/admin/login");
+    router.refresh();
   };
 
   const available = vehicles.filter((v) => v.status === "Disponible").length;
@@ -671,7 +689,7 @@ function VehicleModal({
     category: vehicle?.category ?? "SUV",
     price: String(vehicle?.price ?? ""),
     mileage: vehicle?.mileage != null ? String(vehicle.mileage) : "",
-    fuel: vehicle?.fuel ?? "Gasolina",
+    fuel: vehicle?.fuel ?? "Bencina",
     transmission: vehicle?.transmission ?? "Automática",
     description: vehicle?.description ?? "",
     featured: vehicle?.featured ?? false,
@@ -955,6 +973,11 @@ function Config() {
       <p className="mb-4 text-xs text-white/50">
         Estos valores salen de la ficha del negocio y se muestran en el sitio, WhatsApp y el pie.
       </p>
+      {SITE.phoneIsPlaceholder && (
+        <p className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+          El WhatsApp sigue en el número de ejemplo. Define NEXT_PUBLIC_WHATSAPP_E164 antes de publicar.
+        </p>
+      )}
       <dl className="divide-y divide-white/10">
         {rows.map(([k, v]) => (
           <div key={k} className="grid grid-cols-[8rem_1fr] gap-3 py-3 text-sm">
