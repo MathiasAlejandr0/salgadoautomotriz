@@ -89,7 +89,7 @@ export interface Database {
         Row: {
           id: string;
           nombre: string;
-          email: string;
+          email: string | null;
           telefono: string | null;
           mensaje: string | null;
           vehicle_id: string | null;
@@ -100,7 +100,7 @@ export interface Database {
         Insert: {
           id?: string;
           nombre: string;
-          email: string;
+          email?: string | null;
           telefono?: string | null;
           mensaje?: string | null;
           vehicle_id?: string | null;

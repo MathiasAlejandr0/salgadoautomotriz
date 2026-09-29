@@ -6,6 +6,8 @@ import ConsignaForm from "@/components/consigna/ConsignaForm";
 import { pageMetadata } from "@/lib/seo";
 import { SITE } from "@/lib/site";
 
+export const revalidate = 600;
+
 export const metadata: Metadata = pageMetadata({
   title: "Consigna tu vehículo",
   description: `Deja tu auto en consignación en ${SITE.address}. Carga los datos y fotos; te contactamos.`,

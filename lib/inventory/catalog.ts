@@ -1,11 +1,17 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { VehicleWithImages } from "@/types/database";
 import { slugify } from "@/lib/utils";
 import { drivePhotosFolderId, fetchSalgadoSheet, type SheetVehicle } from "@/lib/inventory/sheet";
 import { indexPhotoFolders, listDriveFolder, photoUrlsForFolder } from "@/lib/inventory/drive";
 
-const CACHE_PATH = path.join(process.cwd(), ".cache", "salgado-inventory.json");
+const CACHE_PATHS = [
+  path.join(os.tmpdir(), "salgado-inventory.json"),
+  ...(process.env.NODE_ENV === "production"
+    ? []
+    : [path.join(process.cwd(), ".cache", "salgado-inventory.json")]),
+];
 const TTL_MS = 10 * 60 * 1000;
 const PLACEHOLDER = "/placeholder-car.svg";
 
@@ -110,22 +116,32 @@ async function photosByStockId(rows: SheetVehicle[], folderId: string): Promise<
 }
 
 async function readCache(): Promise<CacheFile | null> {
-  if (memory) return memory;
-  try {
-    const raw = await readFile(CACHE_PATH, "utf8");
-    const parsed = JSON.parse(raw) as CacheFile;
-    if (!Array.isArray(parsed.vehicles) || typeof parsed.savedAt !== "number") return null;
-    memory = parsed;
-    return parsed;
-  } catch {
-    return null;
+  if (memory && Date.now() - memory.savedAt < TTL_MS && memory.vehicles.length) return memory;
+  for (const filePath of CACHE_PATHS) {
+    try {
+      const raw = await readFile(filePath, "utf8");
+      const parsed = JSON.parse(raw) as CacheFile;
+      if (!Array.isArray(parsed.vehicles) || typeof parsed.savedAt !== "number") continue;
+      if (!parsed.vehicles.length) continue;
+      memory = parsed;
+      return parsed;
+    } catch {
+      // el disco de la función puede ser de solo lectura
+    }
   }
+  return memory;
 }
 
 async function writeCache(file: CacheFile): Promise<void> {
   memory = file;
-  await mkdir(path.dirname(CACHE_PATH), { recursive: true });
-  await writeFile(CACHE_PATH, JSON.stringify(file));
+  for (const filePath of CACHE_PATHS) {
+    try {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, JSON.stringify(file));
+    } catch (err) {
+      console.error("[salgado] no se pudo guardar caché", err);
+    }
+  }
 }
 
 async function refresh(): Promise<VehicleWithImages[]> {
@@ -147,7 +163,6 @@ async function refresh(): Promise<VehicleWithImages[]> {
     const vehicles = markFeatured(ordered.map((row) => toVehicle(row, photos.get(row.stockId) ?? [], now)));
     if (!vehicles.length) throw new Error("La pestaña Salgado no tiene unidades vendibles");
     await writeCache({ savedAt: Date.now(), vehicles });
-    console.log(`[salgado] ${vehicles.length} unidades desde la pestaña ${process.env.SALGADO_SHEET_TAB || "SALGADO AUTOMOTRIZ"}`);
     return vehicles;
   } catch (err) {
     console.error("[salgado] sync", err);

@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { clientIp, rateLimit, readJsonLimited, tooManyRequests } from "@/lib/abuse";
 import { canUseMockFallback, isSupabaseConfigured } from "@/lib/env";
 import { parseSignIn } from "@/lib/validation";
 
 export async function POST(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+  if (!rateLimit(`signin:${clientIp(req)}`, 8, 15 * 60 * 1000)) return tooManyRequests();
 
-  const parsed = parseSignIn(body);
+  const parsedBody = await readJsonLimited(req, 8_000);
+  if (!parsedBody.ok) return parsedBody.response;
+
+  const parsed = parseSignIn(parsedBody.body);
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
@@ -20,10 +19,7 @@ export async function POST(req: Request) {
     if (canUseMockFallback()) {
       return NextResponse.json({ ok: true, demo: true });
     }
-    return NextResponse.json(
-      { error: "Autenticación no configurada" },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: "Autenticación no configurada" }, { status: 503 });
   }
 
   try {
@@ -33,7 +29,7 @@ export async function POST(req: Request) {
       password: parsed.data.password,
     });
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: "Credenciales inválidas" }, { status: 401 });
     }
 
     const meta = data.user?.app_metadata ?? {};

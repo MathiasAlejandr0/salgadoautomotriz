@@ -46,7 +46,7 @@ export function parseContactLead(body: unknown): ParseResult<ContactLeadInput> {
   if (!isRecord(body)) return { ok: false, error: "Cuerpo inválido" };
   const nombre = asString(body.nombre, 120);
   const email = asEmail(body.email);
-  if (!nombre || !email) {
+  if (!nombre || nombre.length < 2 || !email) {
     return { ok: false, error: "Nombre y email válidos son requeridos" };
   }
   return {
@@ -77,7 +77,7 @@ export function parseFinancingLead(body: unknown): ParseResult<FinancingLeadInpu
   const nombre = asString(body.nombre, 120);
   const email = asEmail(body.email);
   const telefono = asString(body.telefono, 40);
-  if (!nombre || !email || !telefono) {
+  if (!nombre || nombre.length < 2 || !email || !telefono || telefono.length < 8) {
     return { ok: false, error: "Nombre, email y teléfono son requeridos" };
   }
 
@@ -87,6 +87,19 @@ export function parseFinancingLead(body: unknown): ParseResult<FinancingLeadInpu
     mensajeBase ??
     (precio != null ? `Precio vehículo: $${Math.round(precio)}` : null);
 
+  const pie = asOptionalNumber(body.pie);
+  const plazo = asOptionalNumber(body.plazo);
+  const renta = asOptionalNumber(body.renta);
+  if (pie != null && (pie < 0 || pie > 500_000_000)) {
+    return { ok: false, error: "El pie está fuera de rango" };
+  }
+  if (plazo != null && (plazo < 6 || plazo > 84)) {
+    return { ok: false, error: "El plazo debe estar entre 6 y 84 meses" };
+  }
+  if (renta != null && (renta < 0 || renta > 500_000_000)) {
+    return { ok: false, error: "La renta está fuera de rango" };
+  }
+
   return {
     ok: true,
     data: {
@@ -94,9 +107,9 @@ export function parseFinancingLead(body: unknown): ParseResult<FinancingLeadInpu
       email,
       telefono,
       vehicle_slug: asOptionalString(body.vehicle_slug, 120),
-      pie: asOptionalNumber(body.pie),
-      plazo: asOptionalNumber(body.plazo),
-      renta: asOptionalNumber(body.renta),
+      pie: pie == null ? null : Math.round(pie),
+      plazo: plazo == null ? null : Math.round(plazo),
+      renta: renta == null ? null : Math.round(renta),
       mensaje,
     },
   };
@@ -110,6 +123,80 @@ export function parseSignIn(body: unknown): ParseResult<{ email: string; passwor
     return { ok: false, error: "Email y contraseña son requeridos" };
   }
   return { ok: true, data: { email, password } };
+}
+
+export interface ConsignaFoto {
+  filename: string;
+  content: string;
+}
+
+export interface ConsignaInput {
+  nombre: string;
+  telefono: string;
+  email: string | null;
+  patente: string;
+  marca: string;
+  modelo: string;
+  year: string;
+  kms: string;
+  notas: string;
+  fotos: ConsignaFoto[];
+}
+
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+export function parseConsigna(body: unknown): ParseResult<ConsignaInput> {
+  if (!isRecord(body)) return { ok: false, error: "Cuerpo inválido" };
+  const nombre = asString(body.nombre, 120);
+  const telefono = asString(body.telefono, 40);
+  if (!nombre || nombre.length < 2 || !telefono || telefono.length < 8) {
+    return { ok: false, error: "Faltan nombre o WhatsApp." };
+  }
+
+  const emailRaw = asOptionalString(body.email, 254);
+  let email: string | null = null;
+  if (emailRaw) {
+    email = asEmail(emailRaw);
+    if (!email) return { ok: false, error: "El correo no es válido." };
+  }
+
+  const patente = (asOptionalString(body.patente, 12) ?? "").toUpperCase();
+  const marca = asOptionalString(body.marca, 60) ?? "";
+  const modelo = asOptionalString(body.modelo, 80) ?? "";
+  const year = asOptionalString(body.year, 4) ?? "";
+  const kms = asOptionalString(body.kms, 20) ?? "";
+  const notas = asOptionalString(body.notas, 2000) ?? "";
+
+  if (!marca && !modelo && !patente) {
+    return { ok: false, error: "Indica al menos marca, modelo o patente." };
+  }
+  if (year && !/^\d{4}$/.test(year)) {
+    return { ok: false, error: "El año no es válido." };
+  }
+
+  const rawFotos = Array.isArray(body.fotos) ? body.fotos.slice(0, 8) : [];
+  const fotos: ConsignaFoto[] = [];
+  let total = 0;
+  for (const item of rawFotos) {
+    if (!isRecord(item)) continue;
+    if (typeof item.data !== "string" || !item.data.trim()) continue;
+    const data = item.data.trim().replace(/^data:[^;]+;base64,/, "");
+    if (!data) continue;
+    if (data.length > 900_000 || data.length % 4 !== 0 || !BASE64.test(data)) {
+      return { ok: false, error: "Una de las fotos no es válida o pesa demasiado." };
+    }
+    total += data.length;
+    if (total > 6_500_000) {
+      return { ok: false, error: "Las fotos pesan demasiado en conjunto." };
+    }
+    const name = (asOptionalString(item.name, 80) ?? `foto-${fotos.length + 1}`).replace(/[^\w.\- ]+/g, "");
+    fotos.push({ filename: name.endsWith(".jpg") ? name : `${name || "foto"}.jpg`, content: data });
+  }
+
+  return {
+    ok: true,
+    data: { nombre, telefono, email, patente, marca, modelo, year, kms, notas, fotos },
+  };
 }
 
 /** Escapa caracteres peligrosos en filtros PostgREST .or() */

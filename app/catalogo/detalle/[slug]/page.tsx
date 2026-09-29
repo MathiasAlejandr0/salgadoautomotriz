@@ -5,13 +5,20 @@ import Footer from "@/components/layout/Footer";
 import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import VehicleDetail from "@/components/detail/VehicleDetail";
 import JsonLdVehicle from "@/components/seo/JsonLdVehicle";
-import { getVehicleBySlug } from "@/lib/queries";
+import { getVehicleBySlug, getVehicles } from "@/lib/queries";
 import { absoluteUrl, OG_IMAGE } from "@/lib/seo";
 import { resolveVehicleImage } from "@/lib/images";
 import { SITE } from "@/lib/site";
 
+export const revalidate = 600;
+
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+export async function generateStaticParams() {
+  const vehicles = await getVehicles();
+  return vehicles.map((vehicle) => ({ slug: vehicle.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

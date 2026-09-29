@@ -11,6 +11,8 @@ import { getSearchOptions } from "@/lib/search-options";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 
+export const revalidate = 600;
+
 export const metadata: Metadata = pageMetadata({
   title: "Salgado Automotriz – Tu próximo auto empieza aquí",
   description:

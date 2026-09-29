@@ -76,7 +76,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
               alt={`${vehicle.brand} ${vehicle.model}`}
               fill
               className="object-cover"
-              priority
+              preload
               sizes="(max-width: 1024px) 100vw, 60vw"
               quality={90}
             />

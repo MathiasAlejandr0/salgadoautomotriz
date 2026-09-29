@@ -70,6 +70,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
         </nav>
 
         <div className="hidden items-center gap-2.5 md:flex">
+          {SITE.googleRating && (
           <div className="flex items-center gap-1.5 rounded-full border border-white/12 bg-black/30 py-1 pl-2 pr-2.5 backdrop-blur-md">
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-black text-[#4285F4]">
               G
@@ -90,6 +91,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
               Google
             </span>
           </div>
+          )}
 
           <a
             href={waUrl("Hola, quiero agendar una visita a Salgado Automotriz")}

@@ -9,6 +9,8 @@ import { getCatalogPage, type VehicleFilters } from "@/lib/queries";
 import { SITE } from "@/lib/site";
 import { pageMetadata } from "@/lib/seo";
 
+export const revalidate = 600;
+
 export const metadata: Metadata = pageMetadata({
   title: "Catálogo",
   description: `Catálogo de autos usados certificados en ${SITE.address}.`,

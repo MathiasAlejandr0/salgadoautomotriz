@@ -1,138 +1,112 @@
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured } from "@/lib/env";
+import { clientIp, honeypotOk, isHoneypotTripped, rateLimit, readJsonLimited, tooManyRequests } from "@/lib/abuse";
+import { canUseMockFallback, isSupabaseConfigured } from "@/lib/env";
+import { escapeHtml } from "@/lib/html";
 import { SITE } from "@/lib/site";
+import { parseConsigna } from "@/lib/validation";
 
-type FotoIn = { name?: string; type?: string; data?: string };
-
-type Body = {
-  nombre?: string;
-  telefono?: string;
-  email?: string;
-  patente?: string;
-  marca?: string;
-  modelo?: string;
-  year?: string;
-  kms?: string;
-  notas?: string;
-  fotos?: FotoIn[];
-};
-
-function esc(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function text(value: unknown) {
-  return String(value ?? "").trim();
-}
+const MAX_BYTES = 7_000_000;
 
 export async function POST(req: Request) {
-  let body: Body;
-  try {
-    body = (await req.json()) as Body;
-  } catch {
-    return NextResponse.json({ ok: false, error: "JSON inválido" }, { status: 400 });
+  if (!rateLimit(`consigna:${clientIp(req)}`, 3, 30 * 60 * 1000)) return tooManyRequests();
+
+  const parsedBody = await readJsonLimited(req, MAX_BYTES);
+  if (!parsedBody.ok) return parsedBody.response;
+  if (isHoneypotTripped(parsedBody.body)) return honeypotOk();
+
+  const parsed = parseConsigna(parsedBody.body);
+  if (!parsed.ok) {
+    return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
   }
 
-  const nombre = text(body.nombre);
-  const telefono = text(body.telefono);
-  const email = text(body.email);
-  const patente = text(body.patente).toUpperCase();
-  const marca = text(body.marca);
-  const modelo = text(body.modelo);
-  const year = text(body.year);
-  const kms = text(body.kms);
-  const notas = text(body.notas);
-
-  if (!nombre || !telefono) {
-    return NextResponse.json({ ok: false, error: "Faltan nombre o WhatsApp." }, { status: 400 });
-  }
-  if (!marca && !modelo && !patente) {
-    return NextResponse.json({ ok: false, error: "Indica al menos marca, modelo o patente." }, { status: 400 });
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return NextResponse.json({ ok: false, error: "El correo no es válido." }, { status: 400 });
-  }
-
-  const rawFotos = Array.isArray(body.fotos) ? body.fotos.slice(0, 8) : [];
-  const attachments = rawFotos
-    .map((f, i) => {
-      const data = text(f.data).replace(/^data:[^;]+;base64,/, "");
-      if (!data || data.length > 900_000) return null;
-      return { filename: text(f.name) || `foto-${i + 1}.jpg`, content: data };
-    })
-    .filter((x): x is { filename: string; content: string } => Boolean(x));
-
+  const data = parsed.data;
   const mensaje = [
     "Consignación",
-    `Patente: ${patente || "—"}`,
-    `Marca: ${marca || "—"}`,
-    `Modelo: ${modelo || "—"}`,
-    `Año: ${year || "—"}`,
-    `Km: ${kms || "—"}`,
-    `Fotos: ${attachments.length}`,
-    notas,
+    `Patente: ${data.patente || "—"}`,
+    `Marca: ${data.marca || "—"}`,
+    `Modelo: ${data.modelo || "—"}`,
+    `Año: ${data.year || "—"}`,
+    `Km: ${data.kms || "—"}`,
+    `Fotos: ${data.fotos.length}`,
+    data.notas,
   ]
     .filter(Boolean)
     .join("\n");
 
+  let saved = false;
   if (isSupabaseConfigured()) {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const { error } = await supabase.from("contact_leads").insert({
-      nombre,
-      email: email || "sin-correo@salgadoautomotriz.cl",
-      telefono,
-      mensaje,
-    });
-    if (error) {
-      console.error("[consigna]", error.message);
-      return NextResponse.json({ ok: false, error: "No se pudo guardar la consignación." }, { status: 500 });
+    try {
+      const { createPublicClient } = await import("@/lib/supabase/public");
+      const supabase = createPublicClient();
+      const { error } = await supabase.from("contact_leads").insert({
+        nombre: data.nombre,
+        email: data.email,
+        telefono: data.telefono,
+        mensaje,
+      });
+      if (error) {
+        console.error("[consigna]", error.message);
+      } else {
+        saved = true;
+      }
+    } catch (err) {
+      console.error("[consigna]", err);
     }
   }
 
+  let mailed = false;
   const key = process.env.RESEND_API_KEY?.trim();
   if (key) {
     const to = process.env.CONSIGNA_TO?.trim() || SITE.email;
     const from = process.env.CONSIGNA_FROM?.trim() || `Salgado Automotriz <${SITE.email}>`;
-    const titulo = [marca, modelo, year, patente].filter(Boolean).join(" ") || "sin ficha";
+    const titulo = [data.marca, data.modelo, data.year, data.patente].filter(Boolean).join(" ") || "sin ficha";
+    const subject = `Consigna: ${titulo} · ${data.nombre}`.replace(/[\r\n]/g, " ").slice(0, 180);
     const payload: Record<string, unknown> = {
       from,
       to: [to],
-      subject: `Consigna: ${titulo} · ${nombre}`,
+      subject,
       html: `
-        <h2>Nueva consignación — ${esc(SITE.name)}</h2>
+        <h2>Nueva consignación — ${escapeHtml(SITE.name)}</h2>
         <p>Un cliente dejó su vehículo para que lo contacten.</p>
         <table cellpadding="6" style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
-          <tr><td><b>Nombre</b></td><td>${esc(nombre)}</td></tr>
-          <tr><td><b>WhatsApp</b></td><td>${esc(telefono)}</td></tr>
-          <tr><td><b>Correo</b></td><td>${esc(email || "—")}</td></tr>
-          <tr><td><b>Patente</b></td><td>${esc(patente || "—")}</td></tr>
-          <tr><td><b>Marca</b></td><td>${esc(marca || "—")}</td></tr>
-          <tr><td><b>Modelo</b></td><td>${esc(modelo || "—")}</td></tr>
-          <tr><td><b>Año</b></td><td>${esc(year || "—")}</td></tr>
-          <tr><td><b>Kilometraje</b></td><td>${esc(kms || "—")}</td></tr>
-          <tr><td><b>Notas</b></td><td>${esc(notas || "—")}</td></tr>
-          <tr><td><b>Fotos adjuntas</b></td><td>${attachments.length}</td></tr>
+          <tr><td><b>Nombre</b></td><td>${escapeHtml(data.nombre)}</td></tr>
+          <tr><td><b>WhatsApp</b></td><td>${escapeHtml(data.telefono)}</td></tr>
+          <tr><td><b>Correo</b></td><td>${escapeHtml(data.email || "—")}</td></tr>
+          <tr><td><b>Patente</b></td><td>${escapeHtml(data.patente || "—")}</td></tr>
+          <tr><td><b>Marca</b></td><td>${escapeHtml(data.marca || "—")}</td></tr>
+          <tr><td><b>Modelo</b></td><td>${escapeHtml(data.modelo || "—")}</td></tr>
+          <tr><td><b>Año</b></td><td>${escapeHtml(data.year || "—")}</td></tr>
+          <tr><td><b>Kilometraje</b></td><td>${escapeHtml(data.kms || "—")}</td></tr>
+          <tr><td><b>Notas</b></td><td>${escapeHtml(data.notas || "—")}</td></tr>
+          <tr><td><b>Fotos adjuntas</b></td><td>${data.fotos.length}</td></tr>
         </table>
       `,
       text: mensaje,
     };
-    if (email) payload.reply_to = email;
-    if (attachments.length) payload.attachments = attachments;
+    if (data.email) payload.reply_to = data.email;
+    if (data.fotos.length) payload.attachments = data.fotos;
 
-    const sent = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!sent.ok) {
-      console.error("[consigna] Resend", sent.status);
+    try {
+      const sent = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      mailed = sent.ok;
+      if (!sent.ok) console.error("[consigna] Resend", sent.status);
+    } catch (err) {
+      console.error("[consigna] Resend", err);
     }
   }
 
-  return NextResponse.json({ ok: true });
+  if (saved || mailed) return NextResponse.json({ ok: true });
+
+  if (canUseMockFallback()) {
+    return NextResponse.json({ ok: true, demo: true });
+  }
+
+  return NextResponse.json(
+    { ok: false, error: "No se pudo registrar la consignación. Escríbenos por WhatsApp." },
+    { status: 503 }
+  );
 }

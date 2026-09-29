@@ -14,7 +14,7 @@ export default function HomeReviews({ reviews }: Props) {
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-10 text-center">
           <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-brand-accent">
-            {SITE.googleRating} ★ en Google
+            {SITE.googleRating ? `${SITE.googleRating} ★ en Google` : "Testimonios"}
           </p>
           <h2 className="text-[1.75rem] font-black text-white md:text-[2rem]">
             Clientes reales
