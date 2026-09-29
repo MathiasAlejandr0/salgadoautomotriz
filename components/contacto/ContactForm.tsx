@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Send, Check } from "lucide-react";
 import WhatsAppCTA from "@/components/shared/WhatsAppCTA";
+import HoneypotField from "@/components/shared/HoneypotField";
 
 export default function ContactForm() {
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", mensaje: "" });
@@ -13,14 +14,15 @@ export default function ContactForm() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    const company_website = String(new FormData(e.currentTarget).get("company_website") ?? "");
     try {
       const res = await fetch("/api/contact-lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, company_website }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -49,7 +51,8 @@ export default function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-[#0C2138] border border-[#1a3a5c] rounded-2xl p-6 space-y-4">
+    <form onSubmit={handleSubmit} className="relative bg-[#0C2138] border border-[#1a3a5c] rounded-2xl p-6 space-y-4">
+      <HoneypotField />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs text-[#94A3B8] mb-1.5">Nombre *</label>

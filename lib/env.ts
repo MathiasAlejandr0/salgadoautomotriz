@@ -1,7 +1,8 @@
 /**
- * Fronteras de entorno explícitas.
- * En producción: mock/admin demo solo con ALLOW_DEMO_MODE=true.
- * En desarrollo local: mock permitido sin Supabase para no romper el UI.
+ * Fronteras de entorno.
+ * En producción (incluido preview de Vercel, NODE_ENV=production) no hay
+ * admin abierto ni datos ficticios, aunque ALLOW_DEMO_MODE=true.
+ * En `next dev` el mock local sigue disponible si no hay Supabase.
  */
 
 export function isSupabaseConfigured(): boolean {
@@ -12,23 +13,25 @@ export function isSupabaseConfigured(): boolean {
   return true;
 }
 
-/** Flag explícita (prod o preview) para demo sin backend. */
+export function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+/** Flag histórica. En producción se ignora. */
 export function isDemoModeAllowed(): boolean {
   return process.env.ALLOW_DEMO_MODE === "true";
 }
 
-function isNonProduction(): boolean {
-  return process.env.NODE_ENV !== "production";
-}
-
-/** Datos mock solo si no hay Supabase y estamos en demo/dev. */
+/** Datos mock solo en desarrollo local y sin Supabase. */
 export function canUseMockFallback(): boolean {
+  if (isProduction()) return false;
   if (isSupabaseConfigured()) return false;
-  return isDemoModeAllowed() || isNonProduction();
+  return true;
 }
 
-/** Admin abierto sin auth solo en demo/dev sin Supabase. */
+/** Admin sin sesión solo en desarrollo local y sin Supabase. Nunca en producción. */
 export function isDemoAdminOpen(): boolean {
+  if (isProduction()) return false;
   if (isSupabaseConfigured()) return false;
-  return isDemoModeAllowed() || isNonProduction();
+  return true;
 }

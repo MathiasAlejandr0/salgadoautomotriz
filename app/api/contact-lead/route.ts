@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
+import { clientIp, honeypotOk, isHoneypotTripped, rateLimit, readJsonLimited, tooManyRequests } from "@/lib/abuse";
 import { canUseMockFallback, isSupabaseConfigured } from "@/lib/env";
 import { parseContactLead } from "@/lib/validation";
 
-export async function POST(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+const MAX_BYTES = 32_000;
 
-  const parsed = parseContactLead(body);
+export async function POST(req: Request) {
+  if (!rateLimit(`contact:${clientIp(req)}`, 5, 10 * 60 * 1000)) return tooManyRequests();
+
+  const parsedBody = await readJsonLimited(req, MAX_BYTES);
+  if (!parsedBody.ok) return parsedBody.response;
+  if (isHoneypotTripped(parsedBody.body)) return honeypotOk();
+
+  const parsed = parseContactLead(parsedBody.body);
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
@@ -20,14 +22,11 @@ export async function POST(req: Request) {
     if (canUseMockFallback()) {
       return NextResponse.json({ ok: true, demo: true });
     }
-    return NextResponse.json(
-      { error: "Servicio de contacto no configurado" },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: "Servicio de contacto no configurado" }, { status: 503 });
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { error } = await supabase.from("contact_leads").insert({
       nombre: parsed.data.nombre,
       email: parsed.data.email,

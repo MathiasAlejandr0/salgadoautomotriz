@@ -1,10 +1,7 @@
 import { SITE } from "@/lib/site";
-import { getPublishedReviews } from "@/lib/queries";
+import { jsonLd } from "@/lib/html";
 
-export default async function JsonLdCarDealer() {
-  const reviews = await getPublishedReviews(50);
-  const ratingCount = reviews.length;
-
+export default function JsonLdCarDealer() {
   const data: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "CarDealer",
@@ -41,19 +38,19 @@ export default async function JsonLdCarDealer() {
     ],
   };
 
-  if (ratingCount > 0) {
+  if (SITE.googleRating && SITE.googleRatingCount) {
     data.aggregateRating = {
       "@type": "AggregateRating",
       ratingValue: SITE.googleRating,
       bestRating: "5",
-      ratingCount: String(ratingCount),
+      ratingCount: String(SITE.googleRatingCount),
     };
   }
 
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(data) }}
     />
   );
 }

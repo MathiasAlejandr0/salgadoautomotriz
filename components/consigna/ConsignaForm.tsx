@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ImagePlus, Lock, X } from "lucide-react";
 import { waUrl } from "@/lib/site";
+import HoneypotField from "@/components/shared/HoneypotField";
 
 export const MAX_FOTOS = 8;
 
@@ -106,17 +107,30 @@ export default function ConsignaForm() {
     setPreviews(previews.filter((_, i) => i !== index));
   }
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setBusy(true);
+    const company_website = String(new FormData(e.currentTarget).get("company_website") ?? "");
     try {
       const fotos = [];
       for (const file of files) fotos.push(await compressFoto(file));
       const res = await fetch("/api/consigna", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre, telefono, email, patente, marca, modelo, year, kms, notas, fotos }),
+        body: JSON.stringify({
+          nombre,
+          telefono,
+          email,
+          patente,
+          marca,
+          modelo,
+          year,
+          kms,
+          notas,
+          fotos,
+          company_website,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
@@ -158,6 +172,7 @@ export default function ConsignaForm() {
       className="rounded-3xl border border-brand-accent/50 bg-brand-bg/80 p-5 shadow-[0_0_50px_rgba(0,188,254,0.16)] backdrop-blur sm:p-6"
       onSubmit={(e) => void onSubmit(e)}
     >
+      <HoneypotField />
       <h2 className="text-2xl font-semibold text-white">Datos del vehículo</h2>
       <div className="mt-6 grid gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -236,7 +251,8 @@ export default function ConsignaForm() {
             <ul className="mt-3 grid grid-cols-4 gap-2">
               {previews.map((src, i) => (
                 <li key={src} className="relative">
-                  {/* preview local, no pasa por el optimizador */}
+                  {/* blob: URL local; el optimizador de next/image no aplica */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={src} alt="" className="h-16 w-full rounded-lg object-cover" />
                   <button
                     type="button"

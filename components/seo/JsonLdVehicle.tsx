@@ -1,6 +1,7 @@
 import type { VehicleWithImages } from "@/types/database";
 import { SITE } from "@/lib/site";
 import { absoluteUrl } from "@/lib/seo";
+import { jsonLd } from "@/lib/html";
 import { resolveVehicleImage } from "@/lib/images";
 
 interface Props {
@@ -55,7 +56,7 @@ export default function JsonLdVehicle({ vehicle }: Props) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(data) }}
     />
   );
 }
