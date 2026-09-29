@@ -34,9 +34,9 @@ export function driveImageUrl(fileId: string): string {
 export async function listDriveFolder(folderId: string): Promise<DriveEntry[]> {
   const url = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}`;
   const res = await fetch(url, {
-    cache: "no-store",
     headers: { "User-Agent": "SalgadoAutomotriz/1.0" },
     signal: AbortSignal.timeout(20_000),
+    next: { revalidate: 600 },
   });
   if (!res.ok) throw new Error(`Drive respondió ${res.status}`);
   return parseDriveListing(await res.text());

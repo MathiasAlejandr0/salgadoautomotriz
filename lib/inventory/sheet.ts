@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import { parseCsv } from "@/lib/csv";
 
 const FALLBACK_SHEET_ID = "1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc";
 const DEFAULT_TAB = "SALGADO AUTOMOTRIZ";
@@ -244,23 +244,23 @@ export function parseSalgadoRows(rows: unknown[][]): { vehicles: SheetVehicle[];
   return { vehicles, driveFolderId };
 }
 
-export async function downloadWorkbook(): Promise<XLSX.WorkBook> {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId()}/export?format=xlsx`;
-  const res = await fetch(url, { cache: "no-store", headers: { "User-Agent": "SalgadoAutomotriz/1.0" } });
+export async function fetchSalgadoSheet(): Promise<{ vehicles: SheetVehicle[]; driveFolderId: string | null }> {
+  const tab = sheetTabName();
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId()}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": "SalgadoAutomotriz/1.0" },
+    next: { revalidate: 600 },
+  });
   if (!res.ok) throw new Error(`Sheets respondió ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  const head = buf.subarray(0, 80).toString("utf8");
-  if (head.includes("<html") || head.includes("<!DOCTYPE")) {
+  const text = await res.text();
+  const head = text.slice(0, 120).toLowerCase();
+  if (head.includes("<html") || head.includes("<!doctype")) {
     throw new Error("La planilla no está compartida como lectura pública");
   }
-  return XLSX.read(buf, { type: "buffer" });
-}
-
-export async function fetchSalgadoSheet(): Promise<{ vehicles: SheetVehicle[]; driveFolderId: string | null }> {
-  const workbook = await downloadWorkbook();
-  const wanted = fold(sheetTabName());
-  const name = workbook.SheetNames.find((sheet) => fold(sheet) === wanted);
-  if (!name) throw new Error(`No está la pestaña ${sheetTabName()}`);
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], { header: 1, defval: "" });
-  return parseSalgadoRows(rows);
+  const rows = parseCsv(text);
+  const parsed = parseSalgadoRows(rows);
+  if (!parsed.vehicles.length && !rows.some((row) => row.some((cell) => fold(cell).includes("PATENTE")))) {
+    throw new Error(`No está la pestaña ${tab}`);
+  }
+  return parsed;
 }

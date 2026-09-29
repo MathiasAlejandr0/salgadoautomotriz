@@ -1,7 +1,9 @@
+import { cache } from "react";
 import type { VehicleWithImages, Review } from "@/types/database";
 import { MOCK_REVIEWS, MOCK_VEHICLES } from "@/lib/mock-data";
 import { canUseMockFallback, isSupabaseConfigured } from "@/lib/env";
 import { sanitizeSearchTerm } from "@/lib/validation";
+import { createPublicClient } from "@/lib/supabase/public";
 
 export type VehicleFilters = {
   brand?: string;
@@ -105,13 +107,12 @@ export async function getFeaturedVehicles(limit = 6): Promise<VehicleWithImages[
   return all.filter((v) => v.featured && v.published).slice(0, limit);
 }
 
-export async function getVehicles(filters?: VehicleFilters): Promise<VehicleWithImages[]> {
+export const getVehicles = cache(async function getVehicles(filters?: VehicleFilters): Promise<VehicleWithImages[]> {
   if (!isSupabaseConfigured()) {
     return applyFilters(await loadInventory(), filters);
   }
 
-  const { createClient } = await import("@/lib/supabase/server");
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   let query = supabase
     .from("vehicles")
     .select("*, vehicle_images(*)")
@@ -138,21 +139,20 @@ export async function getVehicles(filters?: VehicleFilters): Promise<VehicleWith
     return !probe || (probe as { id: string }[]).length === 0;
   });
   return sortVehicles(list, filters?.sort);
-}
+});
 
-export async function getVehicleBySlug(slug: string): Promise<VehicleWithImages | null> {
+export const getVehicleBySlug = cache(async function getVehicleBySlug(slug: string): Promise<VehicleWithImages | null> {
   const all = await getVehicles();
   return all.find((v) => v.slug === slug && v.published) ?? null;
-}
+});
 
-export async function getPublishedReviews(limit = 6): Promise<Review[]> {
+export const getPublishedReviews = cache(async function getPublishedReviews(limit = 6): Promise<Review[]> {
   if (!isSupabaseConfigured()) {
     if (!canUseMockFallback()) return [];
     return MOCK_REVIEWS.slice(0, limit);
   }
 
-  const { createClient } = await import("@/lib/supabase/server");
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const data = await fromSupabase("reviews", async () =>
     supabase
       .from("reviews")
@@ -163,7 +163,7 @@ export async function getPublishedReviews(limit = 6): Promise<Review[]> {
   );
 
   return (data as Review[] | null) ?? [];
-}
+});
 
 /** Una sola carga: facets + lista filtrada. */
 export async function getCatalogPage(filters?: VehicleFilters): Promise<{
