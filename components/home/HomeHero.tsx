@@ -25,11 +25,10 @@ export default function HomeHero({ options }: Props) {
       )}
     >
       <Image
-        src="/hero-bg.png?v=41"
+        src="/hero-bg.webp"
         alt=""
         fill
-        priority
-        unoptimized
+        preload
         className="object-cover object-[78%_50%] sm:object-[88%_48%] lg:object-[90%_46%]"
         sizes="100vw"
       />

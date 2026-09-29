@@ -6,6 +6,8 @@ import ContactForm from "@/components/contacto/ContactForm";
 import { Phone, Mail, MapPin, Clock } from "lucide-react";
 import { pageMetadata } from "@/lib/seo";
 
+export const revalidate = 600;
+
 export const metadata: Metadata = pageMetadata({
   title: "Contacto",
   description:

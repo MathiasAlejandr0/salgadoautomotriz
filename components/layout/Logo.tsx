@@ -19,12 +19,11 @@ export default function Logo({ className = "", height = 66 }: LogoProps) {
       className={cn("inline-flex shrink-0 items-center leading-none", className)}
     >
       <Image
-        src="/logo-salgado-transparent.png?v=12"
+        src="/logo-salgado-transparent.png"
         alt="Salgado Automotriz"
         width={width}
         height={height}
-        priority
-        unoptimized
+        preload
         className="block object-contain"
         style={{ width, height }}
       />

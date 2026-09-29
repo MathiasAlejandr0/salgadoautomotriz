@@ -9,6 +9,8 @@ import FinancingCalculator, {
 import { getVehicles } from "@/lib/queries";
 import { pageMetadata } from "@/lib/seo";
 
+export const revalidate = 600;
+
 export const metadata: Metadata = pageMetadata({
   title: "Financiamiento",
   description: "Simula pie y plazo. Un asesor te confirma por WhatsApp.",
@@ -32,7 +34,7 @@ export default async function FinanciamientoPage() {
             fill
             className="object-cover object-center"
             sizes="100vw"
-            priority
+            preload
             quality={90}
           />
           <div className="absolute inset-0 bg-brand-bg/55" />
