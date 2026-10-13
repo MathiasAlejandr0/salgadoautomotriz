@@ -88,7 +88,7 @@ function hasActiveFilters(filters?: VehicleFilters): boolean {
   );
 }
 
-/** Planilla solo si la tabla no existe o todavía no hay ninguna unidad. */
+/** Supabase solo si la planilla no devolvió unidades. */
 async function inventoryOrSheet(
   remote: VehicleWithImages[] | null,
   filters: VehicleFilters | undefined,
@@ -108,9 +108,10 @@ export async function getFeaturedVehicles(limit = 6): Promise<VehicleWithImages[
 }
 
 export const getVehicles = cache(async function getVehicles(filters?: VehicleFilters): Promise<VehicleWithImages[]> {
-  if (!isSupabaseConfigured()) {
-    return applyFilters(await loadInventory(), filters);
-  }
+  const live = await loadInventory();
+  if (live.length) return applyFilters(live, filters);
+
+  if (!isSupabaseConfigured()) return [];
 
   const supabase = createPublicClient();
   let query = supabase
