@@ -18,6 +18,8 @@ export interface Database {
           color: string | null;
           doors: number | null;
           engine: string | null;
+          traction?: string | null;
+          power?: string | null;
           price: number;
           description: string | null;
           plate: string | null;
@@ -27,6 +29,9 @@ export interface Database {
           status: "Disponible" | "En reserva" | "Vendido" | "Borrador";
           published: boolean;
           featured: boolean;
+          photos_locked?: boolean;
+          source?: "sheet" | "admin";
+          archived_at?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -64,6 +69,8 @@ export interface Database {
           id: string;
           vehicle_id: string;
           storage_path: string;
+          thumb_path?: string | null;
+          source?: string;
           sort_order: number;
           created_at: string;
         };

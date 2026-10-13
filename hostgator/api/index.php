@@ -9,6 +9,7 @@ ini_set('display_errors', '0');
  */
 
 require __DIR__ . '/_lib/app.php';
+require __DIR__ . '/_lib/media.php';
 require __DIR__ . '/_lib/handlers.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -18,6 +19,12 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
 $pos = strpos($path, '/api/');
 $route = $pos === false ? '' : trim(substr($path, $pos + 5), '/');
+// URLs públicas que .htaccess reescribe aquí sin pasar por /api/.
+if ($path === '/sitemap.xml') {
+    $route = 'sitemap.xml';
+} elseif (preg_match('#^/(google[a-z0-9]{6,40}\.html)$#', $path, $gm)) {
+    $route = 'gsc/' . $gm[1];
+}
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
 try {
@@ -27,6 +34,15 @@ try {
             break;
         case (bool) preg_match('#^vehicles/([a-z0-9-]{1,160})$#', $route, $m) && $method === 'GET':
             h_public_vehicle($m[1]);
+            break;
+        case $route === 'sitemap.xml' && $method === 'GET':
+            h_sitemap();
+            break;
+        case $route === 'analytics.js' && $method === 'GET':
+            h_analytics_js();
+            break;
+        case (bool) preg_match('#^gsc/(google[a-z0-9]{6,40}\.html)$#', $route, $m) && $method === 'GET':
+            h_gsc_file($m[1]);
             break;
         case $route === 'reviews' && $method === 'GET':
             h_public_reviews();
@@ -60,6 +76,10 @@ try {
         case (bool) preg_match('#^admin/vehicles/([a-z0-9-]{1,160})$#', $route, $m) && $method === 'PUT':
             require_admin();
             h_admin_update_vehicle($m[1]);
+            break;
+        case (bool) preg_match('#^admin/vehicles/([a-z0-9-]{1,160})/photos$#', $route, $m) && $method === 'PUT':
+            require_admin();
+            h_admin_photos($m[1]);
             break;
         case (bool) preg_match('#^admin/vehicles/([a-z0-9-]{1,160})$#', $route, $m) && $method === 'DELETE':
             require_admin();

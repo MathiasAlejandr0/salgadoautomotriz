@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
-import { resolveVehicleImage } from "@/lib/images";
+import { resolveVehicleThumb } from "@/lib/images";
 import type { VehicleWithImages } from "@/types/database";
 
 interface FeaturedStripProps {
@@ -31,7 +31,7 @@ export default function FeaturedStrip({ vehicles }: FeaturedStripProps) {
             >
               <div className="relative w-[40%] min-w-[5.5rem] overflow-hidden">
                 <Image
-                  src={resolveVehicleImage(v)}
+                  src={resolveVehicleThumb(v)}
                   alt={`${v.brand} ${v.model}`}
                   fill
                   className="object-cover transition-transform duration-300 group-hover:scale-105"

@@ -15,6 +15,11 @@ AddDefaultCharset UTF-8
   RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
   RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
 
+  # sitemap dinámico (MySQL) y verificación de Search Console por archivo
+  RewriteRule ^sitemap\.xml$ api/index.php [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^google[a-z0-9]+\.html$ api/index.php [L]
+
   # API PHP
   RewriteRule ^api/(_lib|_cron)(/|$) - [F,L]
   RewriteRule ^api/(.+)$ api/index.php [QSA,L]
@@ -56,6 +61,6 @@ AddDefaultCharset UTF-8
   ExpiresByType image/svg+xml "access plus 30 days"
 </IfModule>
 
-<FilesMatch "(^\.|\.(sql|log|ini|sh|md|bak)$|salgado-config\.php)">
+<FilesMatch "(^\.|\.(sql|gz|zip|log|ini|sh|md|bak|env)$|salgado-config\.php)">
   Require all denied
 </FilesMatch>

@@ -11,7 +11,7 @@ if (preg_match('#^/api/(_lib|_cron)(/|$)#', $path) || preg_match('#^/uploads/.*\
     http_response_code(403);
     return true;
 }
-if (str_starts_with($path, '/api/')) {
+if (str_starts_with($path, '/api/') || $path === '/sitemap.xml' || (preg_match('#^/google[a-z0-9]+\.html$#', $path) && !is_file($root . $path))) {
     $_SERVER['SCRIPT_NAME'] = '/api/index.php';
     require $root . '/api/index.php';
     return true;

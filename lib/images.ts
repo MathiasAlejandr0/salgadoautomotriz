@@ -2,8 +2,8 @@ import type { VehicleWithImages } from "@/types/database";
 import { DEMO_IMAGES } from "@/lib/mock-data";
 import { canUseMockFallback } from "@/lib/env";
 
-const FALLBACK =
-  "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1200&q=80";
+/** Sin foto real: placeholder propio (nunca una foto de stock que parezca inventario). */
+const FALLBACK = "/placeholder-car.svg";
 
 export function getStorageImageUrl(storagePath: string): string {
   if (storagePath.startsWith("http")) return storagePath;
@@ -34,6 +34,29 @@ export function resolveVehicleImage(vehicle: VehicleWithImages): string {
   }
 
   return FALLBACK;
+}
+
+/** Miniatura WebP (generada por el backend) para tarjetas y tiras; si no hay, la foto grande. */
+export function resolveVehicleThumb(vehicle: VehicleWithImages): string {
+  const first = (vehicle.vehicle_images ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)[0];
+  if (first?.thumb_path) return first.thumb_path;
+  return resolveVehicleImage(vehicle);
+}
+
+/** Miniaturas de la galería, alineadas con resolveVehicleGallery. */
+export function resolveVehicleGalleryThumbs(vehicle: VehicleWithImages): string[] {
+  const images = (vehicle.vehicle_images ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const img of images) {
+    const full = resolveImagePath(img.storage_path, vehicle.slug);
+    if (!full || seen.has(full)) continue;
+    seen.add(full);
+    out.push(img.thumb_path || full);
+  }
+  return out.length ? out : [resolveVehicleImage(vehicle)];
 }
 
 /** Galería real (sin duplicar ni badges inventados). */

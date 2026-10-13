@@ -17,7 +17,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { formatCLP } from "@/lib/utils";
-import { resolveVehicleGallery } from "@/lib/images";
+import { resolveVehicleGallery, resolveVehicleGalleryThumbs } from "@/lib/images";
 import type { VehicleWithImages } from "@/types/database";
 import { waUrl } from "@/lib/site";
 import { calcCuota, pieMinimo } from "@/lib/financing";
@@ -29,6 +29,7 @@ interface Props {
 
 export default function VehicleDetail({ vehicle, waMessage }: Props) {
   const gallery = resolveVehicleGallery(vehicle);
+  const thumbs = resolveVehicleGalleryThumbs(vehicle);
   const [current, setCurrent] = useState(0);
   const [plazo, setPlazo] = useState(60);
 
@@ -43,10 +44,10 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
       value:
         vehicle.mileage != null
           ? `${vehicle.mileage.toLocaleString("es-CL")} km`
-          : "—",
+          : "Consultar",
     },
-    { icon: Settings2, label: "Transmisión", value: vehicle.transmission ?? "—" },
-    { icon: Fuel, label: "Combustible", value: vehicle.fuel ?? "—" },
+    { icon: Settings2, label: "Transmisión", value: vehicle.transmission ?? "Consultar" },
+    { icon: Fuel, label: "Combustible", value: vehicle.fuel ?? "Consultar" },
     { icon: Calendar, label: "Año", value: String(vehicle.year) },
   ];
 
@@ -107,7 +108,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
                   i === current ? "border-[#00BCFE] shadow-[0_0_12px_rgba(0,188,254,0.4)]" : "border-[#16324f]"
                 }`}
               >
-                <Image src={src} alt="" fill className="object-cover" sizes="88px" />
+                <Image src={thumbs[i] ?? src} alt="" fill loading="lazy" className="object-cover" sizes="88px" />
               </button>
             ))}
           </div>

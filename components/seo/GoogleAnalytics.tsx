@@ -2,41 +2,38 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import Script from "next/script";
-import { useEffect } from "react";
-
-const MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "";
-const GA_ID = /^G-[A-Z0-9]+$/.test(MEASUREMENT_ID) ? MEASUREMENT_ID : "";
+import { useEffect, useRef } from "react";
 
 declare global {
   interface Window {
     dataLayer?: unknown[];
     gtag?: (...args: unknown[]) => void;
+    __GA4_ID?: string;
   }
 }
 
-/** GA4. No mide el panel de administración. */
+/**
+ * GA4 configurable en el servidor: /api/analytics.js lee 'ga4_id' de
+ * salgado-config.php (vacío = no carga nada). No mide el panel admin.
+ */
 export default function GoogleAnalytics() {
   const pathname = usePathname();
   const search = useSearchParams();
-  const skip = !GA_ID || pathname.startsWith("/admin");
+  const skip = pathname.startsWith("/admin");
+  const first = useRef(true);
 
   useEffect(() => {
-    if (skip || typeof window.gtag !== "function") return;
+    if (skip) return;
+    if (first.current) {
+      first.current = false; // la primera vista la registra analytics.js
+      return;
+    }
+    const id = window.__GA4_ID;
+    if (!id || typeof window.gtag !== "function") return;
     const query = search.toString();
-    window.gtag("config", GA_ID, {
-      page_path: query ? `${pathname}?${query}` : pathname,
-      anonymize_ip: true,
-    });
+    window.gtag("config", id, { page_path: query ? `${pathname}?${query}` : pathname, anonymize_ip: true });
   }, [pathname, search, skip]);
 
   if (skip) return null;
-
-  return (
-    <>
-      <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
-      <Script id="ga4" strategy="afterInteractive">
-        {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}',{anonymize_ip:true});`}
-      </Script>
-    </>
-  );
+  return <Script src="/api/analytics.js" strategy="afterInteractive" />;
 }

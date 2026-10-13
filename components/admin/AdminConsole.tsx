@@ -542,6 +542,13 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
               className="max-h-72 rounded-2xl border border-white/10 object-cover"
             />
           )}
+          {vehicles.find((v) => v.slug === photoSlug) && (
+            <PhotoOrder
+              key={photoSlug + (vehicles.find((v) => v.slug === photoSlug)?.updated_at ?? "")}
+              vehicle={vehicles.find((v) => v.slug === photoSlug)!}
+              onDone={onChange}
+            />
+          )}
         </Panel>
       ) : (
         <>
@@ -993,6 +1000,88 @@ function Config() {
 }
 
 
+
+/** Ordenar fotos y elegir portada (la primera). Al guardar, el sync de Drive deja de tocarlas. */
+function PhotoOrder({ vehicle, onDone }: { vehicle: AdminVehicle; onDone: () => void }) {
+  const initial = (vehicle.vehicle_images ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
+  const [items, setItems] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const dirty = items.some((img, i) => img.id !== initial[i]?.id);
+
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= items.length) return;
+    const next = items.slice();
+    const [it] = next.splice(from, 1);
+    next.splice(to, 0, it);
+    setItems(next);
+  };
+
+  const send = async (body: object, ok: string) => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await apiFetch(`/api/admin/vehicles/${vehicle.slug}/photos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      setMsg(res.ok ? ok : data.error || "No se pudo guardar");
+      if (res.ok) onDone();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (items.length < 1) return null;
+  return (
+    <div className="mt-5" data-testid="photo-order">
+      <p className="mb-2 text-xs text-white/50">
+        Orden de fotos: la primera es la portada.{" "}
+        {vehicle.photos_locked ? "Protegidas: el sync de Drive no las cambia." : "Las maneja el sync de Drive."}
+      </p>
+      <div className="flex flex-wrap gap-3">
+        {items.map((img, i) => (
+          <div key={img.id} className={`w-32 rounded-xl border p-1.5 ${i === 0 ? "border-[#00BCFE]" : "border-white/10"}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img.thumb_path || img.storage_path} alt="" loading="lazy" className="h-20 w-full rounded-lg object-cover" />
+            <div className="mt-1.5 flex items-center justify-between gap-1 text-[11px]">
+              <button type="button" aria-label="Mover a la izquierda" disabled={busy || i === 0} onClick={() => move(i, i - 1)} className="rounded bg-white/10 px-1.5 disabled:opacity-30">◀</button>
+              {i === 0 ? (
+                <span className="font-bold text-[#00BCFE]">Portada</span>
+              ) : (
+                <button type="button" disabled={busy} onClick={() => move(i, 0)} className="rounded bg-white/10 px-1.5 hover:bg-[#00BCFE] hover:text-[#041018]">Portada</button>
+              )}
+              <button type="button" aria-label="Mover a la derecha" disabled={busy || i === items.length - 1} onClick={() => move(i, i + 1)} className="rounded bg-white/10 px-1.5 disabled:opacity-30">▶</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={busy || !dirty}
+          onClick={() => void send({ order: items.map((x) => x.id) }, "Orden guardado")}
+          className="rounded-xl bg-[#00BCFE] px-4 py-2 text-xs font-bold text-[#041018] disabled:opacity-40"
+        >
+          Guardar orden
+        </button>
+        {vehicle.photos_locked && vehicle.source !== "admin" && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void send({ locked: false }, "Las fotos vuelven a sincronizarse con Drive")}
+            className="rounded-xl bg-white/10 px-4 py-2 text-xs text-white/80 hover:bg-white/20"
+          >
+            Volver a usar las fotos de Drive
+          </button>
+        )}
+        {msg && <span className="text-xs text-[#00BCFE]">{msg}</span>}
+      </div>
+    </div>
+  );
+}
 
 function PhotoUpload({ slug, onDone }: { slug: string; onDone: () => void }) {
   const [busy, setBusy] = useState(false);

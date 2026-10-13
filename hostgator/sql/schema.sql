@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
   color VARCHAR(60) NULL,
   doors TINYINT NULL,
   engine VARCHAR(80) NULL,
+  traction VARCHAR(20) NULL,
+  power VARCHAR(40) NULL,
   price BIGINT NOT NULL,
   description TEXT NULL,
   location VARCHAR(120) NULL,
@@ -27,18 +29,24 @@ CREATE TABLE IF NOT EXISTS vehicles (
   status VARCHAR(20) NOT NULL DEFAULT 'Disponible',
   published TINYINT(1) NOT NULL DEFAULT 1,
   featured TINYINT(1) NOT NULL DEFAULT 0,
+  photos_locked TINYINT(1) NOT NULL DEFAULT 0,
+  archived_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL,
   updated_at DATETIME(3) NOT NULL,
   UNIQUE KEY vehicles_slug_uidx (slug),
   UNIQUE KEY vehicles_stock_uidx (stock_id),
   UNIQUE KEY vehicles_plate_uidx (plate),
-  KEY vehicles_catalog_idx (published, category, brand, price)
+  KEY vehicles_catalog_idx (published, category, brand, price),
+  KEY vehicles_archived_idx (source, archived_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS vehicle_images (
   id VARCHAR(64) NOT NULL PRIMARY KEY,
   vehicle_id VARCHAR(64) NOT NULL,
   storage_path VARCHAR(1024) NOT NULL,
+  thumb_path VARCHAR(1024) NULL,
+  source VARCHAR(10) NOT NULL DEFAULT 'drive',
+  drive_file_id VARCHAR(128) NULL,
   sort_order INT NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL,
   KEY vehicle_images_vehicle_idx (vehicle_id, sort_order),
@@ -107,5 +115,6 @@ CREATE TABLE IF NOT EXISTS sync_runs (
   ok TINYINT(1) NOT NULL DEFAULT 0,
   vehicles INT NULL,
   removed INT NULL,
-  message VARCHAR(500) NULL
+  message VARCHAR(500) NULL,
+  log MEDIUMTEXT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

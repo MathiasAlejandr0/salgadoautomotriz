@@ -11,6 +11,7 @@ import Logo from "./Logo";
 const NAV_LINKS = [
   { href: "/catalogo", label: "Catálogo" },
   { href: "/consigna", label: "Consigna tu vehículo" },
+  { href: "/comparador", label: "Comparador" },
   { href: "/nosotros", label: "Nosotros" },
   { href: "/contacto", label: "Contacto" },
 ];

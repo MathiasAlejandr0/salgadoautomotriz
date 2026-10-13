@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatCLP, cn } from "@/lib/utils";
 import type { VehicleWithImages } from "@/types/database";
-import { resolveVehicleImage } from "@/lib/images";
+import { resolveVehicleThumb } from "@/lib/images";
 import { calcCuota, pieMinimo } from "@/lib/financing";
 import { Fuel, Gauge, Calendar, Settings2 } from "lucide-react";
 
@@ -12,7 +12,7 @@ interface VehicleCardProps {
 }
 
 export default function VehicleCard({ vehicle, glow = false }: VehicleCardProps) {
-  const imgSrc = resolveVehicleImage(vehicle);
+  const imgSrc = resolveVehicleThumb(vehicle);
   const pieMin = pieMinimo(vehicle.price);
   const cuota = Math.round(calcCuota(vehicle.price - pieMin, 48));
 

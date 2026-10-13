@@ -416,6 +416,8 @@ function vehicle_input(array $in, string $slug): array
         'color' => opt_trim($in['color'] ?? null),
         'doors' => $doors === null ? null : (int) $doors,
         'engine' => opt_trim($in['engine'] ?? null),
+        'traction' => opt_trim($in['traction'] ?? null),
+        'power' => opt_trim($in['power'] ?? null),
         'price' => (int) round((float) $price),
         'description' => opt_trim($in['description'] ?? null),
         'plate' => opt_trim($in['plate'] ?? null),
@@ -434,8 +436,14 @@ function replace_images(string $vehicleId, $images): void
         return;
     }
     $pdo = db();
+    $prev = $pdo->prepare('SELECT storage_path, thumb_path, source, drive_file_id FROM vehicle_images WHERE vehicle_id = ?');
+    $prev->execute([$vehicleId]);
+    $meta = [];
+    foreach ($prev->fetchAll() as $p) {
+        $meta[$p['storage_path']] = $p;
+    }
     $pdo->prepare('DELETE FROM vehicle_images WHERE vehicle_id = ?')->execute([$vehicleId]);
-    $ins = $pdo->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, sort_order, created_at) VALUES (?,?,?,?,?)');
+    $ins = $pdo->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, source, drive_file_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?)');
     $i = 0;
     foreach ($images as $img) {
         $p = is_array($img) ? trim((string) ($img['storage_path'] ?? '')) : '';
@@ -445,11 +453,60 @@ function replace_images(string $vehicleId, $images): void
         if (!preg_match('#^(https://|/)#', $p)) {
             continue;
         }
-        $ins->execute([uuid4(), $vehicleId, $p, $i, now_db()]);
+        $m = $meta[$p] ?? null;
+        $ins->execute([uuid4(), $vehicleId, $p, $m['thumb_path'] ?? null, $m['source'] ?? (str_starts_with($p, '/uploads/vehicles/') ? 'upload' : 'drive'),
+            $m['drive_file_id'] ?? null, $i, now_db()]);
         if (++$i >= 12) {
             break;
         }
     }
+    // Orden o portada elegidos a mano: el sync de Drive los respeta.
+    $pdo->prepare('UPDATE vehicles SET photos_locked = 1 WHERE id = ?')->execute([$vehicleId]);
+}
+
+/**
+ * Admin: reordena fotos / elige portada (la primera) sin subir nada.
+ * Body: {"order": ["<image id>", ...]} o {"locked": false} para devolver el control a Drive.
+ */
+function h_admin_photos(string $slug): void
+{
+    $in = read_json(64000);
+    if (!is_array($in)) {
+        fail(400, 'JSON inválido');
+    }
+    $stmt = db()->prepare('SELECT id FROM vehicles WHERE slug = ?');
+    $stmt->execute([$slug]);
+    $vehicleId = (string) $stmt->fetchColumn();
+    if ($vehicleId === '') {
+        fail(404, 'No encontrado');
+    }
+    $pdo = db();
+    if (array_key_exists('locked', $in) && $in['locked'] === false) {
+        $pdo->prepare('UPDATE vehicles SET photos_locked = 0, updated_at = ? WHERE id = ?')->execute([now_db(), $vehicleId]);
+        json_out(['vehicle' => one_vehicle($vehicleId)]);
+    }
+    $order = $in['order'] ?? null;
+    if (!is_array($order) || !$order) {
+        fail(400, 'Falta el orden de las fotos');
+    }
+    $cur = $pdo->prepare('SELECT id FROM vehicle_images WHERE vehicle_id = ?');
+    $cur->execute([$vehicleId]);
+    $ids = array_column($cur->fetchAll(), 'id');
+    $order = array_values(array_unique(array_filter($order, 'is_string')));
+    sort($ids);
+    $check = $order;
+    sort($check);
+    if ($check !== $ids) {
+        fail(400, 'El orden debe incluir todas las fotos del auto');
+    }
+    $pdo->beginTransaction();
+    $set = $pdo->prepare('UPDATE vehicle_images SET sort_order = ? WHERE id = ? AND vehicle_id = ?');
+    foreach ($order as $i => $imgId) {
+        $set->execute([$i, $imgId, $vehicleId]);
+    }
+    $pdo->prepare('UPDATE vehicles SET photos_locked = 1, updated_at = ? WHERE id = ?')->execute([now_db(), $vehicleId]);
+    $pdo->commit();
+    json_out(['vehicle' => one_vehicle($vehicleId)]);
 }
 
 function one_vehicle(string $id): array
@@ -528,12 +585,7 @@ function h_admin_delete_vehicle(string $slug): void
     json_out(['ok' => true]);
 }
 
-function uploads_dir(): string
-{
-    return rtrim((string) cfg('uploads_dir', dirname(__DIR__, 2) . '/uploads'), '/\\');
-}
-
-/** Sube fotos (multipart: slug + photos[]). Se re-codifican a JPEG (sin EXIF ni código). */
+/** Sube fotos (multipart: slug + photos[]). Se re-codifican a WebP + miniatura (sin EXIF ni código). */
 function h_admin_upload(): void
 {
     $slug = (string) ($_POST['slug'] ?? '');
@@ -560,7 +612,7 @@ function h_admin_upload(): void
         fail(500, 'No se pudo crear la carpeta de fotos');
     }
     $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $ins = db()->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, sort_order, created_at) VALUES (?,?,?,?,?)');
+    $ins = db()->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, source, sort_order, created_at) VALUES (?,?,?,?,?,?,?)');
     $saved = 0;
     foreach ($files['tmp_name'] as $i => $tmp) {
         if ($existing + $saved >= 12) {
@@ -576,49 +628,21 @@ function h_admin_upload(): void
         if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true) || !getimagesize($tmp)) {
             fail(400, 'Solo se aceptan fotos JPG, PNG o WebP');
         }
-        $name = bin2hex(random_bytes(10)) . '.jpg';
-        $dest = $dir . '/' . $name;
-        if (!reencode_jpeg($tmp, $mime, $dest)) {
+        $bytes = (string) file_get_contents($tmp);
+        $out = save_optimized($bytes, $dir, bin2hex(random_bytes(10)));
+        if (!$out) {
             fail(400, 'No se pudo procesar la foto');
         }
-        $ins->execute([uuid4(), $vehicleId, '/uploads/vehicles/' . $vehicleId . '/' . $name, $next++, now_db()]);
+        $base = '/uploads/vehicles/' . $vehicleId . '/';
+        $ins->execute([uuid4(), $vehicleId, $base . $out[0], $base . $out[1], 'upload', $next++, now_db()]);
         $saved++;
     }
     if (!$saved) {
         fail(400, 'No se recibió ninguna foto válida');
     }
-    db()->prepare('UPDATE vehicles SET updated_at = ? WHERE id = ?')->execute([now_db(), $vehicleId]);
+    // Fotos manuales: el sync de Drive ya no reemplaza las de este auto.
+    db()->prepare('UPDATE vehicles SET photos_locked = 1, updated_at = ? WHERE id = ?')->execute([now_db(), $vehicleId]);
     json_out(['vehicle' => one_vehicle((string) $vehicleId), 'saved' => $saved]);
-}
-
-function reencode_jpeg(string $src, string $mime, string $dest): bool
-{
-    if (!function_exists('imagecreatefromjpeg')) {
-        return $mime === 'image/jpeg' && move_uploaded_file($src, $dest);
-    }
-    $img = match ($mime) {
-        'image/jpeg' => @imagecreatefromjpeg($src),
-        'image/png' => @imagecreatefrompng($src),
-        'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($src) : false,
-        default => false,
-    };
-    if (!$img) {
-        return false;
-    }
-    $w = imagesx($img);
-    $h = imagesy($img);
-    $max = 2000;
-    if ($w > $max || $h > $max) {
-        $scale = $max / max($w, $h);
-        $img2 = imagescale($img, (int) round($w * $scale), (int) round($h * $scale));
-        if ($img2) {
-            imagedestroy($img);
-            $img = $img2;
-        }
-    }
-    $ok = imagejpeg($img, $dest, 85);
-    imagedestroy($img);
-    return $ok;
 }
 
 // ── Admin: leads y reseñas ────────────────────────────────
@@ -704,4 +728,66 @@ function h_admin_upsert_review(): void
     $stmt = db()->prepare('SELECT * FROM reviews WHERE id = ?');
     $stmt->execute([$id]);
     json_out(['review' => review_out($stmt->fetch())]);
+}// ── SEO y analítica ───────────────────────────────────────
+
+function site_url(): string
+{
+    return rtrim((string) cfg('site_url', 'https://salgadoautomotriz.cl'), '/');
+}
+
+/** sitemap.xml dinámico: páginas fijas + cada auto publicado (los nuevos entran solos). */
+function h_sitemap(): void
+{
+    $base = site_url();
+    $static = ['' => '1.0', '/catalogo' => '0.9', '/financiamiento' => '0.7', '/consigna' => '0.7', '/contacto' => '0.6', '/nosotros' => '0.5', '/comparador' => '0.5'];
+    $now = gmdate('Y-m-d');
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+    foreach ($static as $path => $prio) {
+        $xml .= '<url><loc>' . esc($base . $path) . "</loc><lastmod>{$now}</lastmod><changefreq>daily</changefreq><priority>{$prio}</priority></url>\n";
+    }
+    $rows = db()->query('SELECT slug, updated_at FROM vehicles WHERE published = 1 ORDER BY updated_at DESC')->fetchAll();
+    foreach ($rows as $r) {
+        $mod = substr((string) $r['updated_at'], 0, 10);
+        $xml .= '<url><loc>' . esc($base . '/catalogo/detalle/' . $r['slug']) . "</loc><lastmod>{$mod}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+    }
+    $xml .= "</urlset>\n";
+    http_response_code(200);
+    header('Content-Type: application/xml; charset=utf-8');
+    header('Cache-Control: public, max-age=900');
+    echo $xml;
+    exit;
+}
+
+/**
+ * Carga GA4 solo si 'ga4_id' está en la config (vacío = no hace nada).
+ * Archivo JS externo: compatible con la CSP (script-src 'self').
+ */
+function h_analytics_js(): void
+{
+    $id = (string) cfg('ga4_id', '');
+    http_response_code(200);
+    header('Content-Type: application/javascript; charset=utf-8');
+    header('Cache-Control: public, max-age=3600');
+    if (!preg_match('/^G-[A-Z0-9]{4,20}$/', $id)) {
+        echo "/* GA4 no configurado */\n";
+        exit;
+    }
+    $js = json_encode($id);
+    echo "(function(){window.__GA4_ID={$js};var s=document.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id='+{$js};"
+        . "document.head.appendChild(s);window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}"
+        . "window.gtag=gtag;gtag('js',new Date());gtag('config',{$js},{anonymize_ip:true});})();\n";
+    exit;
+}
+
+/** Verificación de Search Console por archivo HTML: config 'gsc_html_file' = "google1234abcd.html". */
+function h_gsc_file(string $name): void
+{
+    $file = (string) cfg('gsc_html_file', '');
+    if ($file === '' || !hash_equals($file, $name)) {
+        json_out(['error' => 'No encontrado'], 404);
+    }
+    http_response_code(200);
+    header('Content-Type: text/html; charset=utf-8');
+    echo 'google-site-verification: ' . esc($name);
+    exit;
 }

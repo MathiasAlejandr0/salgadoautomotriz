@@ -7,7 +7,7 @@ declare(strict_types=1);
  * /home/<usuario>/salgado-config.php. Ver hostgator/config.sample.php.
  */
 
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1200&q=80';
+const FALLBACK_IMAGE = '/placeholder-car.svg';
 
 function cfg(string $key, $default = null)
 {
@@ -301,6 +301,12 @@ function v_opt_num($v): ?float
     return null;
 }
 
+/** Carpeta pública de fotos (public_html/uploads por defecto). */
+function uploads_dir(): string
+{
+    return rtrim((string) cfg('uploads_dir', dirname(__DIR__, 2) . '/uploads'), '/\\');
+}
+
 // ── Vehículos ─────────────────────────────────────────────
 
 function vehicle_row_out(array $r, array $images): array
@@ -319,6 +325,8 @@ function vehicle_row_out(array $r, array $images): array
         'color' => $r['color'],
         'doors' => $r['doors'] === null ? null : (int) $r['doors'],
         'engine' => $r['engine'],
+        'traction' => $r['traction'] ?? null,
+        'power' => $r['power'] ?? null,
         'price' => (int) $r['price'],
         'description' => $r['description'],
         'plate' => $r['plate'],
@@ -328,6 +336,9 @@ function vehicle_row_out(array $r, array $images): array
         'status' => $r['status'],
         'published' => (bool) $r['published'],
         'featured' => (bool) $r['featured'],
+        'source' => $r['source'] ?? 'admin',
+        'photos_locked' => (bool) ($r['photos_locked'] ?? false),
+        'archived_at' => iso($r['archived_at'] ?? null),
         'created_at' => iso($r['created_at']),
         'updated_at' => iso($r['updated_at']),
         'vehicle_images' => $images,
@@ -353,6 +364,8 @@ function load_vehicles(string $where = '1=1', array $params = [], string $order 
             'id' => $i['id'],
             'vehicle_id' => $i['vehicle_id'],
             'storage_path' => $i['storage_path'],
+            'thumb_path' => $i['thumb_path'] ?? null,
+            'source' => $i['source'] ?? 'drive',
             'sort_order' => (int) $i['sort_order'],
             'created_at' => iso($i['created_at']),
         ];

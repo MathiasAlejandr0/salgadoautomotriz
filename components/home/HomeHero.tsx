@@ -21,21 +21,29 @@ export default function HomeHero({ options }: Props) {
     <section
       className={cn(
         "relative w-full overflow-hidden bg-brand-bg",
-        "min-h-[100svh] md:min-h-0 md:flex-1"
+        "min-h-[100svh] md:min-h-0 md:flex-1",
+        // Móvil: foto arriba y texto debajo (como RG), sin tapar el título.
+        "max-sm:flex max-sm:flex-col"
       )}
     >
-      <Image
-        src="/hero-bg.webp"
-        alt=""
-        fill
-        preload
-        className="object-cover object-[78%_50%] sm:object-[88%_48%] lg:object-[90%_46%]"
-        sizes="100vw"
-      />
+      <div className="absolute inset-0 max-sm:bottom-auto max-sm:h-[46svh]">
+        <Image
+          src="/hero-bg.webp"
+          alt=""
+          fill
+          preload
+          className="object-cover object-[78%_50%] sm:object-[88%_48%] lg:object-[90%_46%]"
+          sizes="100vw"
+        />
+      </div>
 
       <div
         aria-hidden
-        className="absolute inset-0 bg-[linear-gradient(95deg,rgba(5,10,20,0.88)_0%,rgba(5,10,20,0.52)_30%,rgba(5,10,20,0.12)_50%,transparent_64%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[46svh] bg-[linear-gradient(180deg,rgba(5,10,20,0.55)_0%,rgba(5,10,20,0)_28%,rgba(5,10,20,0)_62%,var(--color-brand-bg,#050a14)_100%)] sm:hidden"
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 max-sm:hidden bg-[linear-gradient(95deg,rgba(5,10,20,0.88)_0%,rgba(5,10,20,0.52)_30%,rgba(5,10,20,0.12)_50%,transparent_64%)]"
       />
       <div
         aria-hidden
@@ -44,9 +52,9 @@ export default function HomeHero({ options }: Props) {
 
       <Header variant="hero" />
 
-      <div className="absolute inset-x-0 top-[28%] z-10 px-5 sm:top-[26%] sm:px-6 md:top-[24%] lg:top-[22%] lg:px-8">
+      <div className="absolute inset-x-0 top-[28%] z-10 px-5 max-sm:relative max-sm:top-auto max-sm:pt-[44svh] sm:top-[26%] sm:px-6 md:top-[24%] lg:top-[22%] lg:px-8">
         <div className="mx-auto w-full max-w-[1200px]">
-          <div className="w-full max-w-[16rem] sm:max-w-[18.5rem] lg:max-w-[20.5rem]">
+          <div className="w-full max-w-[16rem] max-sm:max-w-[22rem] sm:max-w-[18.5rem] lg:max-w-[20.5rem]">
             <p className="mb-1.5 text-[0.625rem] font-bold uppercase tracking-[0.28em] text-brand-accent sm:text-[0.6875rem]">
               Automotora certificada
             </p>
@@ -90,7 +98,7 @@ export default function HomeHero({ options }: Props) {
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20 px-5 pb-1 sm:px-6 lg:px-8">
+      <div className="absolute inset-x-0 bottom-0 z-20 px-5 pb-1 max-sm:relative max-sm:mt-auto max-sm:pt-6 sm:px-6 lg:px-8">
         <HeroSearchForm options={options} />
       </div>
     </section>
