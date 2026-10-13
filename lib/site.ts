@@ -1,19 +1,15 @@
 /**
  * Ficha pública del negocio.
  *
- * TODO(dueño): el WhatsApp real NO está en el código. Antes de salir a
- * producción define en Vercel:
- *   NEXT_PUBLIC_WHATSAPP_E164=569XXXXXXXX   (solo dígitos, con código de país)
- *   NEXT_PUBLIC_PHONE_DISPLAY="+56 9 XXXX XXXX"
- * Sin esas variables el sitio usa un placeholder (+56 9 1234 5678) que no
- * es el número de Salgado. No inventar el número aquí.
+ * WhatsApp/teléfono: +56 9 9418 8305 (se puede sobrescribir con
+ *   NEXT_PUBLIC_WHATSAPP_E164 y NEXT_PUBLIC_PHONE_DISPLAY).
  *
  * La nota de Google solo se publica si el dueño confirma el dato:
  *   NEXT_PUBLIC_GOOGLE_RATING=4.9
  *   NEXT_PUBLIC_GOOGLE_RATING_COUNT=120
  */
 
-const PLACEHOLDER_E164 = "56912345678";
+const DEFAULT_E164 = "56994188305";
 
 function digits(value: string | undefined): string {
   return (value ?? "").replace(/\D/g, "");
@@ -42,9 +38,9 @@ function readRatingCount(): number | null {
 }
 
 const phoneFromEnv = digits(process.env.NEXT_PUBLIC_WHATSAPP_E164);
-const phoneRaw = phoneFromEnv || PLACEHOLDER_E164;
+const phoneRaw = phoneFromEnv || DEFAULT_E164;
 
-export const phoneIsPlaceholder = phoneFromEnv.length < 8;
+export const phoneIsPlaceholder = phoneRaw.length < 8;
 
 export const SITE = {
   name: "Salgado Automotriz",

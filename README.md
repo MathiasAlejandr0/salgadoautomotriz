@@ -51,7 +51,7 @@ Migraciones en `supabase/migrations/`, en este orden:
 Checklist de deploy: `DEPLOY.md`.
 
 ## Variables de entorno
-Ver `.env.example`. El teléfono de WhatsApp no está fijo en el código: hay que definir `NEXT_PUBLIC_WHATSAPP_E164` antes de salir a producción.
+Ver `.env.example`. El teléfono de WhatsApp por defecto es +56 9 9418 8305 (se puede sobrescribir con `NEXT_PUBLIC_WHATSAPP_E164`).
 
 ## Logo
 `public/logo-salgado-transparent.png` (nav) y `public/logo-salgado.png`.

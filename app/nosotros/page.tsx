@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE } from "@/lib/site";
 import { Shield, Award, Users, Clock, MapPin, Phone, Mail } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -92,7 +93,7 @@ export default function NosotrosPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {[
                 { icon: MapPin, label: "Dirección", value: "Santiago, Chile" },
-                { icon: Phone, label: "Teléfono", value: "+56 9 1234 5678" },
+                { icon: Phone, label: "Teléfono", value: SITE.phone },
                 { icon: Mail, label: "Email", value: "contacto@salgadoautomotriz.cl" },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex items-start gap-4 bg-[#0C2138] border border-[#1a3a5c] rounded-2xl p-5">

@@ -65,7 +65,7 @@ export default function HomeShowroom() {
             presupuesto y financiamiento.
           </p>
           <a
-            href={`tel:${SITE.phoneRaw}`}
+            href={`tel:+${SITE.phoneRaw}`}
             className="text-lg font-bold text-brand-accent hover:underline"
           >
             {SITE.phone}

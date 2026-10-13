@@ -41,7 +41,7 @@ ALLOW_DEMO_MODE=false
 
 `ALLOW_DEMO_MODE` se ignora en producción. No lo uses para abrir el admin.
 
-`NEXT_PUBLIC_WHATSAPP_E164` es obligatorio antes del go-live. Sin valor, los botones de WhatsApp apuntan al placeholder `56912345678`.
+`NEXT_PUBLIC_WHATSAPP_E164` es opcional. Sin valor, los botones de WhatsApp usan el número de Salgado `56994188305`.
 
 La nota de Google (badge y JSON-LD) solo aparece si defines rating y cantidad de reseñas reales. No dejes un 4.9 inventado.
 

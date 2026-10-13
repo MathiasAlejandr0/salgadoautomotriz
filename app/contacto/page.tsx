@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE } from "@/lib/site";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
@@ -14,7 +15,7 @@ export const metadata: Metadata = pageMetadata({
 });
 
 const INFO = [
-  { icon: Phone, label: "Teléfono", value: "+56 9 1234 5678", href: "tel:+56912345678" },
+  { icon: Phone, label: "Teléfono", value: SITE.phone, href: `tel:+${SITE.phoneRaw}` },
   { icon: Mail, label: "Email", value: "contacto@salgadoautomotriz.cl", href: "mailto:contacto@salgadoautomotriz.cl" },
   { icon: MapPin, label: "Dirección", value: "Santiago, Chile", href: undefined },
   { icon: Clock, label: "Horario", value: "Lun–Vie 9–19h · Sáb 10–17h", href: undefined },
