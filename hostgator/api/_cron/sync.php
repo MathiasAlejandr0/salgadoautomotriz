@@ -353,13 +353,63 @@ function drive_listing(string $folderId): array
     throw new RuntimeException('Drive ' . $folderId . ' → ' . implode(' | ', $errors));
 }
 
-/** @return string[] ids de archivo de imagen de la carpeta, en orden natural por nombre */
-function photo_ids(string $folderId, int $limit = 12): array
+/** Imagick con HEIC: solo hace falta si Drive no entrega la versión JPEG renderizada. */
+function heic_supported(): bool
 {
-    // HEIC/HEIF no se pueden mostrar en navegadores ni procesar con GD: se omiten.
-    $files = array_filter(drive_listing($folderId), fn ($e) => !$e['folder'] && preg_match('/\.(jpe?g|png|webp)$/i', $e['name']));
+    static $ok = null;
+    if ($ok === null) {
+        try {
+            $ok = class_exists('Imagick') && \Imagick::queryFormats('HEIC') !== [];
+        } catch (Throwable $e) {
+            $ok = false;
+        }
+    }
+    return $ok;
+}
+
+/** @return array<int, array{id: string, name: string}> imágenes de la carpeta, en orden natural por nombre */
+function photo_files(string $folderId): array
+{
+    // HEIC/HEIF/DNG: Drive las entrega ya renderizadas a JPEG (lh3); si no, se convierten o se omiten.
+    // "._*" son metadatos de macOS (AppleDouble), no fotos: se omiten.
+    $files = array_values(array_filter(
+        drive_listing($folderId),
+        fn ($e) => !$e['folder'] && !str_starts_with($e['name'], '._') && preg_match('/\.(jpe?g|png|webp|heic|heif|dng)$/i', $e['name'])
+    ));
     usort($files, fn ($a, $b) => strnatcasecmp($a['name'], $b['name']));
-    return array_map(fn ($e) => $e['id'], array_slice($files, 0, $limit));
+    return array_map(fn ($e) => ['id' => $e['id'], 'name' => $e['name']], $files);
+}
+
+/**
+ * Une las fotos de todas las carpetas de un mismo ID: primero las carpetas "nuevas",
+ * sin repetir archivos con el mismo nombre (carpetas duplicadas), hasta $limit.
+ *
+ * @param array<int, array{id: string, name: string}> $candidates
+ * @return string[]
+ */
+function merged_photo_ids(array $candidates, string $stockId, int $limit = 12): array
+{
+    usort($candidates, fn ($a, $b) => (int) !preg_match('/nueva/i', $a['name']) <=> (int) !preg_match('/nueva/i', $b['name']));
+    $ids = [];
+    $seen = [];
+    foreach ($candidates as $folder) {
+        try {
+            foreach (photo_files($folder['id']) as $f) {
+                $key = mb_strtolower($f['name']);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $ids[] = $f['id'];
+                if (count($ids) >= $limit) {
+                    return $ids;
+                }
+            }
+        } catch (Throwable $e) {
+            logln("Drive ID {$stockId} ({$folder['name']}): " . $e->getMessage());
+        }
+    }
+    return $ids;
 }
 
 /**
@@ -384,6 +434,12 @@ function mirror_drive_photo(string $fileId, int &$budget): ?array
         } catch (Throwable $e) {
             continue;
         }
+        if (preg_match('/^.{4}ftyp(heic|heix|hevc|mif1|msf1)/s', $bytes)) {
+            $bytes = heic_to_jpeg($bytes);
+            if ($bytes === null) {
+                continue;
+            }
+        }
         $saved = save_optimized($bytes, $dir, $fileId);
         if ($saved) {
             return ["/uploads/drive/{$saved[0]}", "/uploads/drive/{$saved[1]}"];
@@ -391,6 +447,21 @@ function mirror_drive_photo(string $fileId, int &$budget): ?array
     }
     logln("Foto {$fileId}: no se pudo descargar o no es una imagen válida; se omite");
     return null;
+}
+
+function heic_to_jpeg(string $bytes): ?string
+{
+    if (!heic_supported()) {
+        return null;
+    }
+    try {
+        $im = new \Imagick();
+        $im->readImageBlob($bytes);
+        $im->setImageFormat('jpeg');
+        return $im->getImageBlob();
+    } catch (Throwable $e) {
+        return null;
+    }
 }
 
 $lock = fopen(sys_get_temp_dir() . '/salgado-sync.lock', 'c');
@@ -431,7 +502,7 @@ try {
     try {
         foreach (drive_listing($folderId) as $e) {
             if ($e['folder'] && preg_match('/\bID\s*(\d+)\b/i', $e['name'], $m)) {
-                $folders[$m[1]][] = $e['id'];
+                $folders[$m[1]][] = ['id' => $e['id'], 'name' => $e['name']];
             }
         }
         logln('Drive índice: ' . count($folders) . ' carpetas con ID');
@@ -445,20 +516,7 @@ try {
     // 1) Fotos de Drive por unidad (antes de elegir destacados).
     $budget = (int) cfg('sync_photo_budget', 150);
     foreach ($rows as &$r) {
-        $r['photos'] = [];
-        foreach ($folders[$r['stockId']] ?? [] as $candidate) {
-            try {
-                $ids = photo_ids($candidate);
-                if (count($ids) > count($r['photos'])) {
-                    $r['photos'] = $ids;
-                }
-                if (count($r['photos']) >= 4) {
-                    break;
-                }
-            } catch (Throwable $e) {
-                logln("Drive ID {$r['stockId']}: " . $e->getMessage());
-            }
-        }
+        $r['photos'] = merged_photo_ids($folders[$r['stockId']] ?? [], $r['stockId']);
     }
     unset($r);
 
