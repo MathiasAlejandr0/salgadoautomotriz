@@ -4,7 +4,7 @@ export default function ShowroomMap() {
   const q = encodeURIComponent(SITE.mapQuery);
   const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${q}`;
   const wazeUrl = `https://waze.com/ul?q=${q}&navigate=yes`;
-  const visit = waUrl("Hola, quiero coordinar una visita al showroom de Salgado Automotriz en Av. Cardonal (ex Banco de Chile), Puerto Montt.");
+  const visit = waUrl("Hola, quiero coordinar una visita al showroom de Salgado Automotriz en Cardonal #15, Puerto Montt.");
 
   return (
     <section className="mx-auto max-w-[1200px] px-5 pb-10 pt-12 sm:px-6 sm:pb-14 sm:pt-16 lg:px-8">
@@ -36,7 +36,7 @@ export default function ShowroomMap() {
       <div className="mt-8 grid overflow-hidden rounded-2xl border border-white/[0.08] lg:mt-10 lg:grid-cols-[1.55fr_1fr]">
         <div className="relative min-h-[260px] bg-[#e8eaed] sm:min-h-[320px] lg:min-h-[420px]">
           <iframe
-            title={`Salgado Automotriz — ${SITE.address}`}
+            title="Salgado Automotriz — Cardonal #15, Puerto Montt"
             src={`https://maps.google.com/maps?q=${q}&z=16&hl=es&output=embed`}
             className="absolute inset-0 h-full w-full border-0"
             allowFullScreen
@@ -61,7 +61,7 @@ export default function ShowroomMap() {
               {SITE.city} · {SITE.region}
             </p>
             <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/55">
-              Showroom en Av. Cardonal (ex Banco de Chile). Vehículos verificados listos para ver, probar y retirar.
+              Showroom en Cardonal #15. Vehículos verificados listos para ver, probar y retirar.
             </p>
           </div>
 
