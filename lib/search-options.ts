@@ -1,5 +1,4 @@
 import type { VehicleWithImages } from "@/types/database";
-import { getVehicles } from "@/lib/queries";
 
 export interface SearchOptions {
   brands: string[];
@@ -25,10 +24,4 @@ export function buildSearchOptions(vehicles: VehicleWithImages[]): SearchOptions
 
   const allModels = [...new Set(vehicles.map((v) => v.model))].sort();
   return { brands, modelsByBrand, allModels, years };
-}
-
-/** Opciones del buscador desde el inventario real (o mock si demo). */
-export async function getSearchOptions(): Promise<SearchOptions> {
-  const vehicles = await getVehicles();
-  return buildSearchOptions(vehicles);
 }

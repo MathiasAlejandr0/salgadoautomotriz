@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+ini_set('display_errors', '0');
+
 /*
  * Router único de /api/*. Apache (.htaccess) reescribe /api/<ruta> aquí.
  * Contratos idénticos a las rutas Next.js originales (app/api/**).
