@@ -76,7 +76,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
               src={gallery[current]}
               alt={`${vehicle.brand} ${vehicle.model}`}
               fill
-              className="object-cover"
+              className="object-contain object-center"
               preload
               sizes="(max-width: 1024px) 100vw, 60vw"
               quality={90}
@@ -104,11 +104,11 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
               <button
                 key={i}
                 onClick={() => setCurrent(i)}
-                className={`relative shrink-0 w-[88px] h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                className={`relative shrink-0 w-[88px] h-[66px] bg-[#08111e] rounded-lg overflow-hidden border-2 transition-colors ${
                   i === current ? "border-[#00BCFE] shadow-[0_0_12px_rgba(0,188,254,0.4)]" : "border-[#16324f]"
                 }`}
               >
-                <Image src={thumbs[i] ?? src} alt="" fill loading="lazy" className="object-cover" sizes="88px" />
+                <Image src={thumbs[i] ?? src} alt="" fill loading="lazy" className="object-contain object-center" sizes="88px" />
               </button>
             ))}
           </div>

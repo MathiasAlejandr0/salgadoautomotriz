@@ -64,8 +64,9 @@ export default function CompareLive({ initial }: { initial: VehicleWithImages[] 
               {cars.map((v) => (
                 <th key={v.slug} className="min-w-[220px] p-3 align-top">
                   <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c1828] p-4 text-left">
-                    <div className="relative aspect-[16/10] overflow-hidden rounded-xl">
-                      <Image src={resolveVehicleThumb(v)} alt={`${v.brand} ${v.model}`} fill className="object-cover" sizes="260px" />
+                    <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-[#08111e]">
+                      <Image src={resolveVehicleThumb(v)} alt="" aria-hidden fill className="scale-110 object-cover opacity-35 blur-lg" sizes="120px" />
+                      <Image src={resolveVehicleThumb(v)} alt={`${v.brand} ${v.model}`} fill className="object-contain object-center" sizes="260px" />
                     </div>
                     <p className="mt-3 text-sm font-black uppercase text-white">
                       {v.brand} {v.model}

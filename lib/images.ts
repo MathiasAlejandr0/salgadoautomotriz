@@ -1,6 +1,4 @@
 import type { VehicleWithImages } from "@/types/database";
-import { DEMO_IMAGES } from "@/lib/mock-data";
-import { canUseMockFallback } from "@/lib/env";
 
 /** Sin foto real: placeholder propio (nunca una foto de stock que parezca inventario). */
 const FALLBACK = "/placeholder-car.svg";
@@ -10,63 +8,47 @@ export function getStorageImageUrl(storagePath: string): string {
   return `/uploads/${storagePath.replace(/^\/+/, "")}`;
 }
 
-function resolveImagePath(storagePath: string, slug: string): string {
-  if (storagePath.startsWith("http") || storagePath.startsWith("/")) return storagePath;
-  if (storagePath.startsWith("demo/")) {
-    return canUseMockFallback() ? (DEMO_IMAGES[slug] ?? FALLBACK) : FALLBACK;
-  }
-  return getStorageImageUrl(storagePath);
+/**
+ * Solo se muestran fotos alojadas en el sitio (/uploads/...). Las URLs remotas
+ * (p. ej. lh3.googleusercontent.com de Drive) se ignoran: fallan con frecuencia
+ * y el sync ya copia cada foto válida a /uploads.
+ */
+function isLocal(path: string | null | undefined): path is string {
+  return !!path && path.startsWith("/") && !path.startsWith("//") && !path.includes("placeholder");
+}
+
+function localImages(vehicle: VehicleWithImages) {
+  return (vehicle.vehicle_images ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .filter((img) => isLocal(img.storage_path));
 }
 
 export function resolveVehicleImage(vehicle: VehicleWithImages): string {
-  const first = vehicle.vehicle_images?.[0];
-  if (first) {
-    const resolved = resolveImagePath(first.storage_path, vehicle.slug);
-    if (resolved !== FALLBACK || first.storage_path.startsWith("http")) {
-      return resolved;
-    }
-    if (!first.storage_path.startsWith("demo/")) return resolved;
-  }
-
-  // Demo assets solo cuando el fallback mock está permitido
-  if (canUseMockFallback() && DEMO_IMAGES[vehicle.slug]) {
-    return DEMO_IMAGES[vehicle.slug];
-  }
-
-  return FALLBACK;
+  return localImages(vehicle)[0]?.storage_path ?? FALLBACK;
 }
 
 /** Miniatura WebP (generada por el backend) para tarjetas y tiras; si no hay, la foto grande. */
 export function resolveVehicleThumb(vehicle: VehicleWithImages): string {
-  const first = (vehicle.vehicle_images ?? [])
-    .slice()
-    .sort((a, b) => a.sort_order - b.sort_order)[0];
-  if (first?.thumb_path) return first.thumb_path;
-  return resolveVehicleImage(vehicle);
+  const first = localImages(vehicle)[0];
+  if (!first) return FALLBACK;
+  return isLocal(first.thumb_path) ? first.thumb_path : first.storage_path;
 }
 
 /** Miniaturas de la galería, alineadas con resolveVehicleGallery. */
 export function resolveVehicleGalleryThumbs(vehicle: VehicleWithImages): string[] {
-  const images = (vehicle.vehicle_images ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const img of images) {
-    const full = resolveImagePath(img.storage_path, vehicle.slug);
-    if (!full || seen.has(full)) continue;
-    seen.add(full);
-    out.push(img.thumb_path || full);
+  for (const img of localImages(vehicle)) {
+    if (seen.has(img.storage_path)) continue;
+    seen.add(img.storage_path);
+    out.push(isLocal(img.thumb_path) ? img.thumb_path : img.storage_path);
   }
-  return out.length ? out : [resolveVehicleImage(vehicle)];
+  return out.length ? out : [FALLBACK];
 }
 
-/** Galería real (sin duplicar ni badges inventados). */
+/** Galería real (solo fotos locales, sin duplicar). */
 export function resolveVehicleGallery(vehicle: VehicleWithImages): string[] {
-  const images = (vehicle.vehicle_images ?? [])
-    .slice()
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((img) => resolveImagePath(img.storage_path, vehicle.slug));
-
-  const unique = [...new Set(images.filter(Boolean))];
-  if (unique.length > 0) return unique;
-  return [resolveVehicleImage(vehicle)];
+  const unique = [...new Set(localImages(vehicle).map((img) => img.storage_path))];
+  return unique.length ? unique : [FALLBACK];
 }

@@ -2,7 +2,7 @@ const STEPS = [
   { n: "01", title: "Explora el stock", text: "Filtra vehículos verificados con ficha clara y fotos reales." },
   { n: "02", title: "Revisa en detalle", text: "Galería, especificaciones y precio transparente." },
   { n: "03", title: "Simula tu cuota", text: "Elige pie y plazo. Te respondemos el mismo día hábil." },
-  { n: "04", title: "Visita el showroom", text: "Coordinamos la visita en Cardonal #15, Puerto Montt." },
+  { n: "04", title: "Visita el showroom", text: "Coordinamos la visita en Av. Cardonal (ex Banco de Chile), Puerto Montt." },
 ];
 
 export default function HomeProcess() {
@@ -17,7 +17,7 @@ export default function HomeProcess() {
           Comprar en cuatro pasos
         </h2>
         <p className="mt-3 max-w-xl text-sm text-white/50">
-          Del catálogo al showroom, con atención en Cardonal #15.
+          Del catálogo al showroom, con atención en Av. Cardonal (ex Banco de Chile).
         </p>
 
         <div className="mt-8 grid gap-3 sm:mt-10 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">

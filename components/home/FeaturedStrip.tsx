@@ -29,13 +29,14 @@ export default function FeaturedStrip({ vehicles }: FeaturedStripProps) {
               href={`/catalogo/detalle/${v.slug}`}
               className="group flex h-[5.25rem] w-[min(82vw,17.5rem)] shrink-0 snap-center overflow-hidden rounded-xl border border-white/[0.09] bg-[#0c1626] transition hover:border-brand-accent/35 sm:h-[5.5rem] sm:w-auto sm:shrink sm:snap-none"
             >
-              <div className="relative w-[40%] min-w-[5.5rem] overflow-hidden">
+              <div className="relative h-full w-[116px] shrink-0 sm:w-[132px] overflow-hidden bg-[#08111e]">
+                <Image src={resolveVehicleThumb(v)} alt="" aria-hidden fill className="scale-110 object-cover opacity-35 blur-lg" sizes="120px" />
                 <Image
                   src={resolveVehicleThumb(v)}
                   alt={`${v.brand} ${v.model}`}
                   fill
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
-                  sizes="(max-width: 640px) 40vw, 150px"
+                  className="object-contain object-center transition-transform duration-300 group-hover:scale-105"
+                  sizes="120px"
                 />
               </div>
               <div className="flex flex-1 flex-col justify-center px-2.5 py-1.5">

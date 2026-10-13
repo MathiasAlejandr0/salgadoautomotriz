@@ -15,7 +15,7 @@ const PILLARS = [
   {
     n: "03",
     title: "Entrega en patio",
-    desc: "Visita y retiro en Cardonal #15, Puerto Montt, con asesoría de punta a punta.",
+    desc: "Visita y retiro en Av. Cardonal (ex Banco de Chile), Puerto Montt, con asesoría de punta a punta.",
   },
 ];
 

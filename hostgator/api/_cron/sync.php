@@ -375,7 +375,7 @@ function mirror_drive_photo(string $fileId, int &$budget): ?array
         return ["/uploads/drive/{$fileId}.{$ext}", "/uploads/drive/{$fileId}_t.{$ext}"];
     }
     if ($budget <= 0) {
-        return ['https://lh3.googleusercontent.com/d/' . $fileId . '=w1600', null];
+        return ['deferred', null]; // se descarga en la próxima corrida; nunca se publica la URL de Drive
     }
     $budget--;
     foreach (["https://lh3.googleusercontent.com/d/{$fileId}=w1600", 'https://drive.google.com/uc?export=download&id=' . rawurlencode($fileId)] as $url) {
@@ -502,9 +502,12 @@ try {
 
         // Descargas fuera de la transacción.
         $images = [];
+        $deferred = false;
         foreach ($r['photos'] as $fileId) {
             $m = mirror_drive_photo($fileId, $budget);
-            if ($m) {
+            if ($m && $m[0] === 'deferred') {
+                $deferred = true;
+            } elseif ($m) {
                 $images[] = [$m[0], $m[1], $fileId];
                 $photoStats['mirrored']++;
             } else {
@@ -534,6 +537,10 @@ try {
         // Si Drive no responde o no trae fotos válidas, se conservan las actuales.
         $hasUploads->execute([$id]);
         $locked = ($found && (int) $found['photos_locked'] === 1) || (int) $hasUploads->fetchColumn() > 0;
+        // Si quedaron fotos pendientes por el tope de descargas, no se reemplaza a medias.
+        if ($deferred && $found) {
+            $locked = true;
+        }
         if (!$locked && ($images || !$found)) {
             $delImg->execute([$id]);
             if ($images) {
@@ -546,6 +553,37 @@ try {
         }
         $pdo->commit();
         $keep[] = $id;
+    }
+
+    // Limpieza: URLs remotas de Drive que quedaron de versiones anteriores del sync.
+    // Se intenta copiarlas; si no se puede, se quitan (y si el auto queda sin fotos, placeholder).
+    $remote = $pdo->query("SELECT i.id, i.vehicle_id, i.storage_path FROM vehicle_images i JOIN vehicles v ON v.id = i.vehicle_id WHERE i.storage_path LIKE 'http%'")->fetchAll();
+    $fix = $pdo->prepare('UPDATE vehicle_images SET storage_path = ?, thumb_path = ?, drive_file_id = ? WHERE id = ?');
+    $drop = $pdo->prepare('DELETE FROM vehicle_images WHERE id = ?');
+    $touched = [];
+    foreach ($remote as $img) {
+        $fileId = preg_match('#googleusercontent\.com/d/([A-Za-z0-9_-]+)#', $img['storage_path'], $mm) ? $mm[1] : null;
+        $m = $fileId ? mirror_drive_photo($fileId, $budget) : null;
+        if ($m && $m[0] === 'deferred') {
+            continue;
+        }
+        if ($m) {
+            $fix->execute([$m[0], $m[1], $fileId, $img['id']]);
+        } else {
+            $drop->execute([$img['id']]);
+            $photoStats['skipped']++;
+        }
+        $touched[$img['vehicle_id']] = true;
+    }
+    $empty = $pdo->prepare('SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ?');
+    foreach (array_keys($touched) as $vid) {
+        $empty->execute([$vid]);
+        if ((int) $empty->fetchColumn() === 0) {
+            $insImg->execute([uuid4(), $vid, PLACEHOLDER, null, 'drive', null, 0, $now]);
+        }
+    }
+    if ($remote) {
+        logln('Limpieza de URLs de Drive: ' . count($remote) . ' revisadas');
     }
 
     // Lo que ya no está en la planilla se archiva (no se borra): sale del sitio y queda en el admin.
