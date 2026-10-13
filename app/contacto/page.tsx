@@ -17,7 +17,7 @@ export const metadata: Metadata = pageMetadata({
 const INFO = [
   { icon: Phone, label: "Teléfono", value: SITE.phone, href: `tel:+${SITE.phoneRaw}` },
   { icon: Mail, label: "Email", value: "contacto@salgadoautomotriz.cl", href: "mailto:contacto@salgadoautomotriz.cl" },
-  { icon: MapPin, label: "Dirección", value: "Santiago, Chile", href: undefined },
+  { icon: MapPin, label: "Dirección", value: "Puerto Montt, Chile", href: undefined },
   { icon: Clock, label: "Horario", value: "Lun–Vie 9–19h · Sáb 10–17h", href: undefined },
 ];
 

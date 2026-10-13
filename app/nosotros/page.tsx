@@ -92,7 +92,7 @@ export default function NosotrosPage() {
             <h2 className="text-2xl font-black text-white mb-8">Encuéntranos</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {[
-                { icon: MapPin, label: "Dirección", value: "Santiago, Chile" },
+                { icon: MapPin, label: "Dirección", value: "Puerto Montt, Chile" },
                 { icon: Phone, label: "Teléfono", value: SITE.phone },
                 { icon: Mail, label: "Email", value: "contacto@salgadoautomotriz.cl" },
               ].map(({ icon: Icon, label, value }) => (
