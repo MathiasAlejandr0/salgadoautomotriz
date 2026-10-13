@@ -7,8 +7,7 @@ const FALLBACK =
 
 export function getStorageImageUrl(storagePath: string): string {
   if (storagePath.startsWith("http")) return storagePath;
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  return `${base}/storage/v1/object/public/vehicle-photos/${storagePath}`;
+  return `/uploads/${storagePath.replace(/^\/+/, "")}`;
 }
 
 function resolveImagePath(storagePath: string, slug: string): string {

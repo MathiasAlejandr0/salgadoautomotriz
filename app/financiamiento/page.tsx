@@ -3,13 +3,12 @@ import Image from "next/image";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
-import FinancingCalculator, {
+import FinancingLive from "@/components/financiamiento/FinancingLive";
+import {
   FinancingTrustCards,
 } from "@/components/financiamiento/FinancingCalculator";
 import { getVehicles } from "@/lib/queries";
 import { pageMetadata } from "@/lib/seo";
-
-export const revalidate = 600;
 
 export const metadata: Metadata = pageMetadata({
   title: "Financiamiento",
@@ -42,7 +41,7 @@ export default async function FinanciamientoPage() {
 
           <div className="relative mx-auto max-w-[1280px] px-5 py-12 lg:px-8 lg:py-16">
             <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
-              <FinancingCalculator vehicles={vehicles} />
+              <FinancingLive initial={vehicles} />
               <div className="order-first lg:order-last lg:pl-2">
                 <h1 className="mb-5 text-4xl font-black leading-[1.05] tracking-tight md:text-5xl lg:text-[3.25rem]">
                   <span className="text-white">Financiamiento claro.</span>

@@ -47,3 +47,13 @@ supabase/.branches
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# HostGator: paquete y exportaciones (datos personales)
+/hostgator/dist/
+/out/
+
+
+/hostgator/config.php
+/hostgator/data/
+/flyers/
+/mockups/

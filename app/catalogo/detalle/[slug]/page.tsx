@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
-import VehicleDetail from "@/components/detail/VehicleDetail";
+import VehicleDetailLive from "@/components/detail/VehicleDetailLive";
 import JsonLdVehicle from "@/components/seo/JsonLdVehicle";
 import { getVehicleBySlug, getVehicles } from "@/lib/queries";
 import { absoluteUrl, OG_IMAGE } from "@/lib/seo";
 import { resolveVehicleImage } from "@/lib/images";
 import { SITE } from "@/lib/site";
-
-export const revalidate = 600;
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -18,7 +15,8 @@ interface PageProps {
 
 export async function generateStaticParams() {
   const vehicles = await getVehicles();
-  return vehicles.map((vehicle) => ({ slug: vehicle.slug }));
+  // "_" es la plantilla que Apache sirve para autos publicados después del build.
+  return [...vehicles.map((vehicle) => ({ slug: vehicle.slug })), { slug: "_" }];
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -69,19 +67,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+export const dynamicParams = false;
+
 export default async function VehicleDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  const vehicle = await getVehicleBySlug(slug);
-  if (!vehicle) notFound();
-
-  const waMessage = `Hola, me interesa el ${vehicle.brand} ${vehicle.model} ${vehicle.year} (${vehicle.slug}). ¿Está disponible?`;
+  const vehicle = slug === "_" ? null : await getVehicleBySlug(slug);
 
   return (
     <>
-      <JsonLdVehicle vehicle={vehicle} />
+      {vehicle && <JsonLdVehicle vehicle={vehicle} />}
       <Header />
       <main className="flex-1 pt-[76px]">
-        <VehicleDetail vehicle={vehicle} waMessage={waMessage} />
+        <VehicleDetailLive initial={vehicle} />
       </main>
       <Footer />
       <WhatsAppFloat />

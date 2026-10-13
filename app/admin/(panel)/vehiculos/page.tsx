@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import AdminRedirect from "@/components/admin/AdminRedirect";
 
 export default function Page() {
-  redirect("/admin?tab=inventario");
+  return <AdminRedirect to="/admin?tab=inventario" />;
 }

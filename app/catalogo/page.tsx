@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { Suspense } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
-import VehicleCard from "@/components/catalog/VehicleCard";
-import FilterBar from "@/components/catalog/FilterBar";
-import { getCatalogPage, type VehicleFilters } from "@/lib/queries";
+import CatalogLive, { CatalogCount } from "@/components/catalog/CatalogLive";
+import { getVehicles } from "@/lib/queries";
 import { SITE } from "@/lib/site";
 import { pageMetadata } from "@/lib/seo";
-
-export const revalidate = 600;
 
 export const metadata: Metadata = pageMetadata({
   title: "Catálogo",
@@ -17,36 +15,8 @@ export const metadata: Metadata = pageMetadata({
   path: "/catalogo",
 });
 
-interface PageProps {
-  searchParams: Promise<{
-    brand?: string;
-    category?: string;
-    search?: string;
-    priceMax?: string;
-    yearMin?: string;
-    yearMax?: string;
-    sort?: string;
-  }>;
-}
-
-function parseSort(sort?: string): VehicleFilters["sort"] {
-  if (sort === "price-asc" || sort === "price-desc" || sort === "year-desc") {
-    return sort;
-  }
-  return undefined;
-}
-
-export default async function CatalogoPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const { vehicles, brands, categories, years } = await getCatalogPage({
-    brand: params.brand,
-    category: params.category,
-    search: params.search,
-    priceMax: params.priceMax ? Number(params.priceMax) : undefined,
-    yearMin: params.yearMin ? Number(params.yearMin) : undefined,
-    yearMax: params.yearMax ? Number(params.yearMax) : undefined,
-    sort: parseSort(params.sort),
-  });
+export default async function CatalogoPage() {
+  const vehicles = await getVehicles();
 
   return (
     <>
@@ -67,7 +37,9 @@ export default async function CatalogoPage({ searchParams }: PageProps) {
               Catálogo
             </h1>
             <p className="text-base text-brand-muted md:text-lg">
-              <span className="font-bold text-brand-accent">{vehicles.length}</span>{" "}
+              <Suspense fallback={<span className="font-bold text-brand-accent">{vehicles.length}</span>}>
+                <CatalogCount initial={vehicles} />
+              </Suspense>{" "}
               vehículos publicados en{" "}
               <span className="font-semibold text-brand-accent">
                 {SITE.address.split(",")[0]}
@@ -77,37 +49,9 @@ export default async function CatalogoPage({ searchParams }: PageProps) {
         </section>
 
         <div className="mx-auto max-w-[1280px] px-5 py-8 lg:px-8">
-          <FilterBar
-            brands={brands}
-            categories={categories}
-            years={years}
-            currentFilters={{
-              brand: params.brand,
-              category: params.category,
-              search: params.search,
-              priceMax: params.priceMax,
-              yearMin: params.yearMin,
-              yearMax: params.yearMax,
-              sort: params.sort,
-            }}
-          />
-
-          {vehicles.length > 0 ? (
-            <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 md:gap-6">
-              {vehicles.map((veh, i) => (
-                <VehicleCard key={veh.id} vehicle={veh} glow={i === 1} />
-              ))}
-            </div>
-          ) : (
-            <div className="card-premium mt-8 rounded-2xl py-20 text-center">
-              <p className="mb-2 text-lg font-semibold text-white">
-                No se encontraron vehículos
-              </p>
-              <a href="/catalogo" className="text-sm text-brand-accent hover:underline">
-                Ver todos
-              </a>
-            </div>
-          )}
+          <Suspense fallback={null}>
+            <CatalogLive initial={vehicles} />
+          </Suspense>
         </div>
       </main>
       <Footer />

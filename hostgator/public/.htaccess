@@ -1,0 +1,61 @@
+# Salgado Automotriz · HostGator (Apache)
+Options -Indexes -MultiViews
+DirectorySlash Off
+DirectoryIndex index.html
+ErrorDocument 404 /404.html
+AddDefaultCharset UTF-8
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # HTTPS + sin www
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://salgadoautomotriz.cl%{REQUEST_URI} [L,R=301]
+  RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+  RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+
+  # API PHP
+  RewriteRule ^api/(_lib|_cron)(/|$) - [F,L]
+  RewriteRule ^api/(.+)$ api/index.php [QSA,L]
+
+  # Quitar barra final (excepto raíz)
+  RewriteRule ^(.+)/$ /$1 [R=301,L]
+
+  # Ficha de vehículo: HTML generado o, si es nuevo, la plantilla que carga por API
+  RewriteCond %{DOCUMENT_ROOT}/catalogo/detalle/$1.html -f
+  RewriteRule ^catalogo/detalle/([a-z0-9-]+)$ catalogo/detalle/$1.html [L]
+  RewriteRule ^catalogo/detalle/([a-z0-9-]+)$ catalogo/detalle/_.html [L]
+
+  # URLs limpias: /catalogo -> catalogo.html
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME}.html -f
+  RewriteRule ^(.+)$ $1.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com https://www.google-analytics.com https://www.googletagmanager.com; font-src 'self' data:; connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://stats.g.doubleclick.net; frame-src https://www.google.com https://maps.google.com"
+  Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
+
+<FilesMatch "(^\.|\.(sql|log|ini|sh|md|bak)$|salgado-config\.php)">
+  Require all denied
+</FilesMatch>

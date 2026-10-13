@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/site";
-import { getVehicles } from "@/lib/queries";
 
-export const revalidate = 600;
+export const dynamic = "force-static";
+import { getVehicles } from "@/lib/queries";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = SITE.url;

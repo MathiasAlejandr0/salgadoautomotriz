@@ -26,7 +26,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "export",
+  trailingSlash: false,
   images: {
+    unoptimized: true,
     qualities: [75, 85, 90],
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
@@ -37,9 +40,6 @@ const nextConfig: NextConfig = {
         pathname: "/storage/v1/object/public/**",
       },
     ],
-  },
-  async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
   },
 };
 

@@ -6,11 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:hostgator": "next build && node hostgator/tools/package.mjs"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.47.0",
     "next": "^16.3.6",

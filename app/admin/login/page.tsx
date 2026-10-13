@@ -21,14 +21,9 @@ export default function AdminLoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Demo: permitir entrar sin Supabase
-        if (data.demo) {
-          router.push("/admin");
-          return;
-        }
-        setError(data.error || "Credenciales inválidas");
+setError(data.error || "Credenciales inválidas");
         return;
       }
       router.push("/admin");
@@ -48,7 +43,7 @@ export default function AdminLoginPage() {
         </div>
         <h1 className="text-xl font-black text-white text-center mb-1">Panel Admin</h1>
         <p className="text-sm text-[#94A3B8] text-center mb-6">
-          Ingresa con tu cuenta de Supabase Auth
+          Ingresa con tu cuenta de administrador
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -81,10 +76,6 @@ export default function AdminLoginPage() {
             {loading ? "Ingresando…" : "Ingresar"}
           </button>
         </form>
-        <p className="text-[11px] text-[#94A3B8] text-center mt-4">
-          Sin Supabase: el panel demo solo abre en desarrollo o con{" "}
-          <code className="text-[#00BCFE]">ALLOW_DEMO_MODE=true</code>.
-        </p>
       </div>
     </div>
   );

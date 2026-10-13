@@ -5,8 +5,6 @@ import Footer from "@/components/layout/Footer";
 import WhatsAppCTA, { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import { pageMetadata } from "@/lib/seo";
 
-export const revalidate = 600;
-
 export const metadata: Metadata = pageMetadata({
   title: "Nosotros",
   description:

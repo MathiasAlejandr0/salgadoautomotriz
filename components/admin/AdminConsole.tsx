@@ -9,6 +9,7 @@ import { calcCuota, pieMinimo } from "@/lib/financing";
 import { SITE } from "@/lib/site";
 import type { AdminLead, AdminVehicle, StockStatus } from "@/lib/admin-store";
 import type { Review } from "@/types/database";
+import { apiFetch } from "@/lib/live";
 
 type Tab = "dashboard" | "telemetria" | "inventario" | "crm" | "analitica" | "config";
 type CrmTab = "leads" | "resenas" | "testdrives" | "reservas" | "creditos";
@@ -65,9 +66,9 @@ export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?
 
   const load = useCallback(async () => {
     const [v, l, r] = await Promise.all([
-      fetch("/api/admin/vehicles").then((res) => (res.ok ? res.json() : { vehicles: [] })),
-      fetch("/api/admin/leads").then((res) => (res.ok ? res.json() : { leads: [] })),
-      fetch("/api/admin/reviews").then((res) => (res.ok ? res.json() : { reviews: [] })),
+      apiFetch("/api/admin/vehicles").then((res) => (res.ok ? res.json() : { vehicles: [] })),
+      apiFetch("/api/admin/leads").then((res) => (res.ok ? res.json() : { leads: [] })),
+      apiFetch("/api/admin/reviews").then((res) => (res.ok ? res.json() : { reviews: [] })),
     ]);
     setVehicles(v.vehicles || []);
     setLeads(l.leads || []);
@@ -78,9 +79,9 @@ export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?
     let cancelled = false;
     async function run() {
       const [v, l, r] = await Promise.all([
-        fetch("/api/admin/vehicles").then((res) => (res.ok ? res.json() : { vehicles: [] })),
-        fetch("/api/admin/leads").then((res) => (res.ok ? res.json() : { leads: [] })),
-        fetch("/api/admin/reviews").then((res) => (res.ok ? res.json() : { reviews: [] })),
+        apiFetch("/api/admin/vehicles").then((res) => (res.ok ? res.json() : { vehicles: [] })),
+        apiFetch("/api/admin/leads").then((res) => (res.ok ? res.json() : { leads: [] })),
+        apiFetch("/api/admin/reviews").then((res) => (res.ok ? res.json() : { reviews: [] })),
       ]);
       if (cancelled) return;
       setVehicles(v.vehicles || []);
@@ -94,7 +95,7 @@ export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?
   }, []);
 
   const logout = async () => {
-    await fetch("/api/auth/signout", { method: "POST" }).catch(() => {});
+    await apiFetch("/api/auth/signout", { method: "POST" }).catch(() => {});
     router.push("/admin/login");
     router.refresh();
   };
@@ -461,7 +462,7 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
   });
 
   const setStatusOf = async (v: AdminVehicle, next: StockStatus) => {
-    await fetch(`/api/admin/vehicles/${v.slug}`, {
+    await apiFetch(`/api/admin/vehicles/${v.slug}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next, featured: next === "Disponible" ? v.featured : false }),
@@ -471,12 +472,12 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
 
   const remove = async (v: AdminVehicle) => {
     if (!confirm(`¿Eliminar "${v.brand} ${v.model}" del catálogo?`)) return;
-    await fetch(`/api/admin/vehicles/${v.slug}`, { method: "DELETE" });
+    await apiFetch(`/api/admin/vehicles/${v.slug}`, { method: "DELETE" });
     onChange();
   };
 
   const duplicate = async (v: AdminVehicle) => {
-    await fetch("/api/admin/vehicles", {
+    await apiFetch("/api/admin/vehicles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -532,6 +533,7 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
               </option>
             ))}
           </select>
+          {photoSlug && <PhotoUpload slug={photoSlug} onDone={onChange} />}
           {vehicles.find((v) => v.slug === photoSlug) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -715,12 +717,12 @@ function VehicleModal({
       slug: vehicle?.slug || slugify(`${form.brand}-${form.model}-${form.year}`),
     };
     const res = vehicle
-      ? await fetch(`/api/admin/vehicles/${vehicle.slug}`, {
+      ? await apiFetch(`/api/admin/vehicles/${vehicle.slug}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
-      : await fetch("/api/admin/vehicles", {
+      : await apiFetch("/api/admin/vehicles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -803,7 +805,7 @@ function Crm({
   ];
 
   const mark = async (id: string) => {
-    await fetch("/api/admin/leads", {
+    await apiFetch("/api/admin/leads", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -889,7 +891,7 @@ function ReviewsPanel({ reviews, onChange }: { reviews: Review[]; onChange: () =
 
   const add = async (e: FormEvent) => {
     e.preventDefault();
-    await fetch("/api/admin/reviews", {
+    await apiFetch("/api/admin/reviews", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nombre, texto, ciudad, rating: 5, published: true }),
@@ -990,3 +992,45 @@ function Config() {
   );
 }
 
+
+
+function PhotoUpload({ slug, onDone }: { slug: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const upload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true);
+    setMsg("");
+    const body = new FormData();
+    body.append("slug", slug);
+    Array.from(files).forEach((file) => body.append("photos[]", file));
+    try {
+      const res = await apiFetch("/api/admin/upload", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      setMsg(res.ok ? `${data.saved ?? 0} foto(s) subida(s)` : data.error || "No se pudo subir");
+      if (res.ok) onDone();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <label className="mb-4 flex w-full max-w-md cursor-pointer flex-col gap-1 rounded-xl border border-dashed border-white/20 bg-[#050a14] px-3 py-3 text-xs text-white/70 hover:border-[#00BCFE]">
+      <span className="font-bold text-white">{busy ? "Subiendo." : "+ Subir fotos (JPG, PNG o WebP, máx. 12 por auto)"}</span>
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        disabled={busy}
+        className="hidden"
+        data-testid="photo-upload"
+        onChange={(e) => {
+          void upload(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      {msg && <span className="text-[#00BCFE]">{msg}</span>}
+    </label>
+  );
+}
