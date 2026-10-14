@@ -100,9 +100,9 @@ export default function NosotrosPage() {
                   <div className="w-10 h-10 bg-[#071422] rounded-xl flex items-center justify-center shrink-0">
                     <Icon size={18} className="text-[#00BCFE]" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-[#94A3B8] mb-0.5">{label}</p>
-                    <p className="text-sm font-semibold text-white">{value}</p>
+                    <p className="text-sm font-semibold text-white [overflow-wrap:anywhere]">{value}</p>
                   </div>
                 </div>
               ))}
