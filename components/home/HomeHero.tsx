@@ -26,7 +26,8 @@ export default function HomeHero({ options }: Props) {
         "max-sm:flex max-sm:flex-col"
       )}
     >
-      <div className="absolute inset-0 max-sm:bottom-auto max-sm:h-[46svh]">
+      {/* En pantallas anchas (o zoom alejado) la foto se agranda hacia la izquierda para que su zona oscura quede fuera y la camioneta cubra de borde a borde. */}
+      <div className="absolute inset-0 max-sm:bottom-auto max-sm:h-[46svh] sm:left-[calc(-1*clamp(0px,(100vw_-_1100px)*0.28,800px))]">
         <Image
           src="/hero-bg.webp"
           alt=""
