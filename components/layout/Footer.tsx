@@ -2,20 +2,7 @@ import Link from "next/link";
 import { Phone, Mail, MapPin } from "lucide-react";
 import Logo from "./Logo";
 import { SITE } from "@/lib/site";
-
-function SocialIcon({ label, href }: { label: string; href: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="p-2 rounded-lg bg-[#071422] hover:bg-[#1a3a5c] text-[#94A3B8] hover:text-[#00BCFE] transition-colors text-xs font-bold"
-      aria-label={label}
-    >
-      {label === "Instagram" ? "IG" : "FB"}
-    </a>
-  );
-}
+import SocialIcons from "@/components/shared/SocialIcons";
 
 export default function Footer() {
   return (
@@ -28,10 +15,6 @@ export default function Footer() {
               Tu concesionario de confianza en {SITE.address}. Vehículos verificados,
               financiamiento claro y atención experta.
             </p>
-            <div className="flex gap-3 mt-4">
-              <SocialIcon label="Instagram" href="https://instagram.com/salgadoautomotriz" />
-              <SocialIcon label="Facebook" href="https://facebook.com/salgadoautomotriz" />
-            </div>
           </div>
 
           <div>
@@ -97,6 +80,7 @@ export default function Footer() {
           <p>
             © {new Date().getFullYear()} {SITE.name}. Todos los derechos reservados.
           </p>
+          <SocialIcons size={18} className="gap-3" itemClassName="h-9 w-9 bg-[#071422] text-[#94A3B8] hover:bg-[#1a3a5c]" />
         </div>
       </div>
     </footer>

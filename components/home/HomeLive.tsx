@@ -3,6 +3,7 @@
 import HomeHero from "@/components/home/HomeHero";
 import FeaturedStrip from "@/components/home/FeaturedStrip";
 import HomeCatalog from "@/components/home/HomeCatalog";
+import GoogleReviews from "@/components/home/GoogleReviews";
 import { buildSearchOptions } from "@/lib/search-options";
 import { useLiveVehicles } from "@/lib/live";
 import type { VehicleWithImages } from "@/types/database";
@@ -16,6 +17,7 @@ export function HomeTop({ initial }: { initial: VehicleWithImages[] }) {
         <HomeHero options={buildSearchOptions(catalog)} />
         <FeaturedStrip vehicles={featured} />
       </div>
+      <GoogleReviews />
       <HomeCatalog
         vehicles={catalog.filter((v) => !featured.some((f) => f.id === v.id)).slice(0, 6)}
         total={catalog.length}

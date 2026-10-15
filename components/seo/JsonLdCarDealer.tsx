@@ -19,8 +19,8 @@ export default function JsonLdCarDealer() {
     },
     areaServed: "Puerto Montt",
     sameAs: [
-      "https://instagram.com/salgadoautomotriz",
-      "https://facebook.com/salgadoautomotriz",
+      "https://instagram.com/salgadoautomotriz.cl",
+      "https://www.facebook.com/share/1RW9umrNvg/",
     ],
     openingHoursSpecification: [
       {

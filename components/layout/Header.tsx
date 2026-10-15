@@ -7,6 +7,7 @@ import { Menu, X, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SITE, waUrl } from "@/lib/site";
 import Logo from "./Logo";
+import SocialIcons from "@/components/shared/SocialIcons";
 
 const NAV_LINKS = [
   { href: "/catalogo", label: "Catálogo" },
@@ -71,6 +72,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
         </nav>
 
         <div className="hidden items-center gap-2.5 md:flex">
+          <SocialIcons size={16} itemClassName="p-1.5" />
           {SITE.googleRating && (
           <div className="flex items-center gap-1.5 rounded-full border border-white/12 bg-black/30 py-1 pl-2 pr-2.5 backdrop-blur-md">
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-black text-[#4285F4]">
@@ -138,6 +140,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
             >
               Agendar visita
             </a>
+            <SocialIcons size={20} className="mt-3 justify-center gap-4" itemClassName="p-2" />
           </nav>
         </div>
       )}
