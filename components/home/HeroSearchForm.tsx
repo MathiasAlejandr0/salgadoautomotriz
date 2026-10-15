@@ -34,7 +34,7 @@ export default function HeroSearchForm({ options }: Props) {
   };
 
   const field =
-    "flex min-w-0 flex-1 items-center gap-2 border-b border-white/10 px-3 py-2.5 sm:border-b-0 sm:border-r sm:border-white/10 sm:py-0";
+    "relative flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2 border-b border-white/10 px-3 py-2.5 sm:border-b-0 sm:border-r sm:border-white/10 sm:py-0";
 
   return (
     <div
@@ -45,14 +45,14 @@ export default function HeroSearchForm({ options }: Props) {
       )}
     >
       <label className={cn(field, "sm:min-h-11")}>
-        <Car size={14} className="hidden shrink-0 text-brand-accent sm:block" strokeWidth={1.75} />
+        <Car size={14} className="pointer-events-none hidden shrink-0 text-brand-accent sm:block" strokeWidth={1.75} />
         <select
           value={brand}
           onChange={(e) => {
             setBrand(e.target.value);
             setModel("");
           }}
-          className="w-full cursor-pointer appearance-none bg-transparent text-[0.8125rem] font-semibold text-white outline-none"
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent pl-3 pr-8 text-[0.8125rem] font-semibold text-white outline-none sm:pl-[2.125rem]"
           aria-label="Marca"
         >
           <option value="" className="bg-[#0a1524]">
@@ -64,15 +64,15 @@ export default function HeroSearchForm({ options }: Props) {
             </option>
           ))}
         </select>
-        <ChevronDown size={12} className="shrink-0 text-white/40" />
+        <ChevronDown size={12} aria-hidden className="pointer-events-none ml-auto shrink-0 text-white/40" />
       </label>
 
       <label className={cn(field, "sm:min-h-11")}>
-        <Car size={14} className="hidden shrink-0 text-brand-accent sm:block" strokeWidth={1.75} />
+        <Car size={14} className="pointer-events-none hidden shrink-0 text-brand-accent sm:block" strokeWidth={1.75} />
         <select
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          className="w-full cursor-pointer appearance-none bg-transparent text-[0.8125rem] font-semibold text-white outline-none"
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent pl-3 pr-8 text-[0.8125rem] font-semibold text-white outline-none sm:pl-[2.125rem]"
           aria-label="Modelo"
         >
           <option value="" className="bg-[#0a1524]">
@@ -84,19 +84,19 @@ export default function HeroSearchForm({ options }: Props) {
             </option>
           ))}
         </select>
-        <ChevronDown size={12} className="shrink-0 text-white/40" />
+        <ChevronDown size={12} aria-hidden className="pointer-events-none ml-auto shrink-0 text-white/40" />
       </label>
 
       <label className={cn(field, "sm:min-h-11")}>
         <CalendarDays
           size={14}
-          className="hidden shrink-0 text-brand-accent sm:block"
+          className="pointer-events-none hidden shrink-0 text-brand-accent sm:block"
           strokeWidth={1.75}
         />
         <select
           value={year}
           onChange={(e) => setYear(e.target.value)}
-          className="w-full cursor-pointer appearance-none bg-transparent text-[0.8125rem] font-semibold text-white outline-none"
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent pl-3 pr-8 text-[0.8125rem] font-semibold text-white outline-none sm:pl-[2.125rem]"
           aria-label="Año"
         >
           <option value="" className="bg-[#0a1524]">
@@ -108,7 +108,7 @@ export default function HeroSearchForm({ options }: Props) {
             </option>
           ))}
         </select>
-        <ChevronDown size={12} className="shrink-0 text-white/40" />
+        <ChevronDown size={12} aria-hidden className="pointer-events-none ml-auto shrink-0 text-white/40" />
       </label>
 
       <div className="flex items-center p-1.5 sm:min-w-[6.75rem]">
