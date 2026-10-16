@@ -3,9 +3,12 @@ declare(strict_types=1);
 
 /*
  * Sincroniza la pestaña "SALGADO AUTOMOTRIZ" de la planilla + fotos de Drive
- * hacia MySQL. La planilla manda: lo que no está en la planilla se ARCHIVA
- * (status Vendido, published 0; no se borra ni pierde fotos). Solo toca
- * vehículos con source='sheet'; los creados en el admin no se tocan.
+ * hacia MySQL. La pestaña tiene varios bloques: la lista principal y, más
+ * abajo, UNI CHILE / CARDONAL / SALGADO (columnas corridas, sin ORIGEN ni ID).
+ * Cada encabezado arma su mapa. El N° de esas listas no es un ID. La planilla
+ * manda: lo que no está se ARCHIVA (status Vendido, published 0; no se borra
+ * ni pierde fotos). Solo toca vehículos con source='sheet'; los del admin no.
+
  * Fotos de Drive: se copian a /uploads/drive como WebP + miniatura (GD).
  * Fotos subidas a mano o con orden/portada fijada en el admin (photos_locked) no se tocan.
  *
@@ -61,6 +64,40 @@ function http_get_once(string $url): string
     return (string) $body;
 }
 
+/** El visor público trae `name: "PESTAÑA" ... gid: "123"`. gviz no sirve: tipa columnas y borra texto. */
+function sheet_gid_from_html(string $html, string $tab): ?string
+{
+    $want = fold($tab);
+    if (!preg_match_all('/name:\s*"([^"]+)"[^}]*?gid:\s*"(\d+)"/', $html, $matches, PREG_SET_ORDER)) {
+        return null;
+    }
+    foreach ($matches as $m) {
+        $name = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5);
+        if (fold($name) === $want) {
+            return $m[2];
+        }
+    }
+    return null;
+}
+
+function sheet_csv(string $sheetId, string $tab): string
+{
+    // gviz marca la columna del ID como número y deja vacías las patentes
+    // de los bloques de abajo. El export CSV conserva ese texto.
+    $html = http_get('https://docs.google.com/spreadsheets/d/' . rawurlencode($sheetId) . '/htmlview');
+    $gid = sheet_gid_from_html($html, $tab);
+    if ($gid === null) {
+        throw new RuntimeException("No se encontró la pestaña {$tab} para exportar el CSV");
+    }
+    logln("Planilla {$tab} gid {$gid}");
+    $csv = http_get('https://docs.google.com/spreadsheets/d/' . rawurlencode($sheetId) . '/export?format=csv&gid=' . rawurlencode($gid));
+    $head = strtolower(substr($csv, 0, 120));
+    if (str_contains($head, '<html') || str_contains($head, '<!doctype')) {
+        throw new RuntimeException('La planilla no está compartida como lectura pública');
+    }
+    return $csv;
+}
+
 function google_id($v, string $fallback): string
 {
     $id = trim((string) ($v ?: $fallback));
@@ -74,6 +111,7 @@ function fold($v): string
 
 function parse_csv_text(string $text): array
 {
+    $text = preg_replace('/^\xEF\xBB\xBF/', '', $text) ?? $text;
     $h = fopen('php://temp', 'r+');
     fwrite($h, $text);
     rewind($h);
@@ -93,6 +131,46 @@ function col(array $header, string ...$needles): int
             if ($label !== '' && str_contains($label, $n)) {
                 return (int) $i;
             }
+        }
+    }
+    return -1;
+}
+
+/** Todas las columnas cuyo rótulo contiene alguna aguja, de izquierda a derecha. */
+function col_all(array $header, string ...$needles): array
+{
+    $hits = [];
+    foreach ($header as $i => $cell) {
+        $label = fold($cell);
+        if ($label === '') {
+            continue;
+        }
+        foreach ($needles as $n) {
+            if (str_contains($label, $n)) {
+                $hits[] = (int) $i;
+                break;
+            }
+        }
+    }
+    return $hits;
+}
+
+/** N°, Nº, NRO: índice de lista. Se repite entre bloques y no es el ID de las fotos. */
+function is_index_label(string $label): bool
+{
+    $compact = preg_replace('/[^A-Z0-9]/', '', $label) ?? '';
+    return in_array($compact, ['N', 'NO', 'NRO', 'NUM', 'NUMERO'], true);
+}
+
+function col_id(array $header): int
+{
+    foreach ($header as $i => $cell) {
+        $label = fold($cell);
+        if ($label === '' || is_index_label($label)) {
+            continue;
+        }
+        if (preg_match('/\bID\b/', $label)) {
+            return (int) $i;
         }
     }
     return -1;
@@ -141,6 +219,10 @@ function parse_clp($raw): int
     if (preg_match('/falta|reservado|vendido|entregado|sin\s+precio/i', $s)) {
         return 0;
     }
+    if (preg_match('/^\s*(\d+(?:\.\d+)?)[eE]\+?(\d+)\s*$/', $s, $sci)) {
+        $n = (int) round((float) $sci[1] * (10 ** (int) $sci[2]));
+        return $n >= 1000000 ? $n : 0;
+    }
     $digits = preg_replace('/[^\d]/', '', $s) ?? '';
     if ($digits === '') {
         return 0;
@@ -168,10 +250,11 @@ function title_case(string $raw): string
     return implode(' ', array_map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), array_filter($words, 'strlen')));
 }
 
-function guess_category(string $model): string
+function guess_category(string $model, string $brand = ''): string
 {
-    $m = strtoupper($model);
-    if (preg_match('/AMAROK|HILUX|NAVARA|RANGER|\bL200\b|WINGLE|\bT6\b|FRONTIER|SAVEIRO|COLORADO|RAPTOR|VIGUS/', $m)) {
+    // La marca entra porque hay fichas como RAM 700, donde el modelo es solo "700".
+    $m = strtoupper(trim($brand . ' ' . $model));
+    if (preg_match('/AMAROK|HILUX|NAVARA|RANGER|\bL200\b|WINGLE|\bT6\b|\bT60\b|FRONTIER|SAVEIRO|COLORADO|RAPTOR|VIGUS|D\s*-?\s*MAX|BT\s*-?\s*50|\bNP300\b|TRITON|TACOMA|ALASKAN|STRADA|OROCH|SILVERADO|MAVERICK|\bF\s*-?\s*150\b|\bPOER\b|\bRAM\s*700\b/', $m)) {
         return 'Camioneta';
     }
     if (preg_match('/VAN|PARTNER|EXPERT|BOXER|\bC35\b|CARGO|FURG|SPRINTER|BERLINGO|DELIVERY/', $m)) {
@@ -191,6 +274,224 @@ function cell(array $row, int $i)
     return $i < 0 ? '' : ($row[$i] ?? '');
 }
 
+function is_header_row(array $row): bool
+{
+    $hasPlate = false;
+    $hasBrand = false;
+    foreach ($row as $cell) {
+        $label = fold($cell);
+        if (str_contains($label, 'PATENTE')) {
+            $hasPlate = true;
+        }
+        if (str_contains($label, 'MARCA')) {
+            $hasBrand = true;
+        }
+    }
+    return $hasPlate && $hasBrand;
+}
+
+/** Título de sección (UNI CHILE, CARDONAL, SALGADO): una sola celda, sin datos de auto. */
+function section_title(array $row): string
+{
+    $cells = [];
+    foreach ($row as $c) {
+        $t = trim((string) $c);
+        if ($t !== '') {
+            $cells[] = $t;
+        }
+    }
+    if (count($cells) !== 1) {
+        return '';
+    }
+    $text = $cells[0];
+    $f = fold($text);
+    if ($f === '' || strlen($f) < 3 || strlen($f) > 40 || preg_match('/\d/', $f)) {
+        return '';
+    }
+    if (!preg_match('/^[A-Z ]+$/', $f)) {
+        return '';
+    }
+    if (str_contains($f, 'PATENTE') || str_contains($f, 'MARCA') || str_contains($f, 'PRECIO') || str_contains($f, 'ORIGEN')) {
+        return '';
+    }
+    $brandKey = preg_replace('/\s+/', ' ', $f) ?? '';
+    if (isset(BRANDS[$brandKey]) || clean_plate($text) !== '') {
+        return '';
+    }
+    return title_case($text);
+}
+
+function row_is_blank(array $row): bool
+{
+    foreach ($row as $c) {
+        if (trim((string) $c) !== '') {
+            return false;
+        }
+    }
+    return true;
+}
+
+function row_is_unavailable(array $row): bool
+{
+    return (bool) preg_match('/\b(VENDIDO|RESERVADO|ENTREGADO)\b/', fold(implode(' ', $row)));
+}
+
+function looks_like_date(string $s): bool
+{
+    $f = fold($s);
+    if ($f === '') {
+        return false;
+    }
+    if (preg_match('/\b(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)\b/', $f)) {
+        return true;
+    }
+    return (bool) preg_match('/^\d{4,6}(\.0+)?$/', $f);
+}
+
+/** @return array{origin: int, id: int, plate: int, brand: int, model: int, color: int, year: int, price: int, offer: int, km: int, location: int, location_alt: int, shifted: bool} */
+function header_map(array $h): array
+{
+    $prices = col_all($h, 'PRECIO');
+    return [
+        'origin' => col($h, 'ORIGEN'),
+        'id' => col_id($h),
+        'plate' => col($h, 'PATENTE'),
+        'brand' => col($h, 'MARCA'),
+        'model' => col($h, 'MODELO'),
+        'color' => col($h, 'COLOR'),
+        'year' => col($h, 'ANO'),
+        'price' => $prices[0] ?? -1,
+        'offer' => $prices[1] ?? -1,
+        'km' => col($h, 'KILOMET'),
+        'location' => col($h, 'UBICACION'),
+        'location_alt' => -1,
+        'shifted' => false,
+    ];
+}
+
+/**
+ * Bloque sin encabezado propio: N° en la columna de ORIGEN, patente donde iba el ID,
+ * marca donde iba la patente. El precio de lista cae en la columna del año y el de
+ * oferta queda en la columna de precio. La ubicación pasa una columna a la derecha.
+ */
+function shift_map(array $map): array
+{
+    $shifted = $map;
+    $shifted['origin'] = -1;
+    $shifted['id'] = -1;
+    foreach (['plate', 'brand', 'model', 'color', 'year'] as $key) {
+        if ($map[$key] > 0) {
+            $shifted[$key] = $map[$key] - 1;
+        }
+    }
+    $shifted['offer'] = $map['price'];
+    $shifted['price'] = $map['year'];
+    if ($map['location'] >= 0) {
+        $shifted['location'] = $map['location'] + 1;
+        $shifted['location_alt'] = $map['location'];
+    }
+    $shifted['shifted'] = true;
+    return $shifted;
+}
+
+function row_looks_shifted(array $row, array $map): bool
+{
+    if ($map['shifted'] || $map['plate'] <= 0 || $map['year'] <= 0) {
+        return false;
+    }
+    $plateHere = clean_plate(cell($row, $map['plate']));
+    $plateLeft = clean_plate(cell($row, $map['plate'] - 1));
+    $yearNow = (int) date('Y');
+    $yearOk = static fn (int $y): bool => $y >= 1990 && $y <= $yearNow + 1;
+    return $plateHere === '' && $plateLeft !== '' && !$yearOk((int) cell($row, $map['year'])) && $yearOk((int) cell($row, $map['year'] - 1));
+}
+
+function sheet_stock_id($raw): string
+{
+    $s = trim((string) $raw);
+    if ($s === '' || clean_plate($s) !== '') {
+        return '';
+    }
+    if (preg_match('/^\d+(?:\.0+)?$/', $s)) {
+        return (string) (int) $s;
+    }
+    if (preg_match('/\b(\d+)\b/', $s, $m)) {
+        return $m[1];
+    }
+    return '';
+}
+
+function pick_price(array $row, int $listIndex, int $offerIndex): int
+{
+    if ($offerIndex >= 0) {
+        $offer = parse_clp(cell($row, $offerIndex));
+        if ($offer > 0) {
+            return $offer;
+        }
+    }
+    return parse_clp(cell($row, $listIndex));
+}
+
+function location_of(array $row, array $map, string $section): string
+{
+    $candidates = [];
+    if ($map['location'] >= 0) {
+        $candidates[] = (string) cell($row, $map['location']);
+    }
+    if ($map['location_alt'] >= 0) {
+        $candidates[] = (string) cell($row, $map['location_alt']);
+    }
+    if ($section !== '') {
+        $candidates[] = $section;
+    }
+    foreach ($candidates as $raw) {
+        $loc = title_case($raw);
+        if ($loc !== '' && !looks_like_date($loc)) {
+            return $loc;
+        }
+    }
+    return 'Patio';
+}
+
+function parse_vehicle_row(array $row, array $map, string $section): ?array
+{
+    if (row_is_unavailable($row)) {
+        return null;
+    }
+    $plate = clean_plate(cell($row, $map['plate']));
+    $brand = clean_brand(cell($row, $map['brand']));
+    $model = trim((string) cell($row, $map['model']));
+    $year = (int) cell($row, $map['year']);
+    $price = pick_price($row, $map['price'], $map['offer']);
+    $yearNow = (int) date('Y');
+    if ($plate === '' || $brand === '' || $model === '' || $year < 1990 || $year > $yearNow + 1 || $price <= 0) {
+        return null;
+    }
+    // Sin columna ID el stock es la patente. El N° nunca se usa, aunque sea numérico.
+    $stock = $map['id'] >= 0 ? sheet_stock_id(cell($row, $map['id'])) : '';
+    $spec = vehicle_specs($brand, $model, $year);
+    return [
+        'stockId' => $stock !== '' ? $stock : $plate,
+        'hasSheetId' => $stock !== '',
+        'plate' => $plate,
+        'brand' => $brand,
+        'model' => strtoupper($model),
+        'color' => title_case((string) cell($row, $map['color'])),
+        'year' => $year,
+        'price' => $price,
+        'mileage' => parse_km(cell($row, $map['km'])),
+        'fuel' => $spec['fuel'],
+        'transmission' => $spec['transmission'],
+        'engine' => $spec['engine'],
+        'doors' => $spec['doors'],
+        'traction' => $spec['traction'],
+        'power' => $spec['power'],
+        'category' => guess_category($model, $brand),
+        'location' => location_of($row, $map, $section),
+        'origin' => fold(cell($row, $map['origin'])) ?: 'STOCK',
+    ];
+}
+
 function parse_salgado_rows(array $rows): array
 {
     $driveFolder = null;
@@ -199,72 +500,40 @@ function parse_salgado_rows(array $rows): array
             $driveFolder = $m[1];
         }
     }
-    $headerIndex = -1;
-    foreach ($rows as $i => $row) {
-        $labels = array_map('fold', $row);
-        $hasPlate = (bool) array_filter($labels, fn ($l) => str_contains($l, 'PATENTE'));
-        $hasBrand = (bool) array_filter($labels, fn ($l) => str_contains($l, 'MARCA'));
-        if ($hasPlate && $hasBrand) {
-            $headerIndex = $i;
-            break;
-        }
-    }
-    if ($headerIndex < 0) {
-        return [[], $driveFolder, false];
-    }
-    $h = $rows[$headerIndex];
-    $iOrigin = col($h, 'ORIGEN');
-    $iId = col($h, 'ID');
-    $iPlate = col($h, 'PATENTE');
-    $iBrand = col($h, 'MARCA');
-    $iModel = col($h, 'MODELO');
-    $iColor = col($h, 'COLOR');
-    $iYear = col($h, 'ANO');
-    $iPrice = col($h, 'PRECIO');
-    $iKm = col($h, 'KILOMET');
-    $iLoc = col($h, 'UBICACION');
-    $yearNow = (int) date('Y');
+    $map = null;
+    $section = '';
     $out = [];
     $seen = [];
-    foreach (array_slice($rows, $headerIndex + 1) as $row) {
-        if (!array_filter($row, fn ($c) => trim((string) $c) !== '')) {
+    foreach ($rows as $row) {
+        if (row_is_blank($row)) {
             continue;
         }
-        $plate = clean_plate(cell($row, $iPlate));
-        $brand = clean_brand(cell($row, $iBrand));
-        $model = trim((string) cell($row, $iModel));
-        $year = (int) cell($row, $iYear);
-        $price = parse_clp(cell($row, $iPrice));
-        if ($plate === '' || $brand === '' || $model === '' || $year < 1990 || $year > $yearNow + 1 || $price <= 0) {
+        if (is_header_row($row)) {
+            $map = header_map($row);
             continue;
         }
-        if (isset($seen[$plate])) {
+        // El banner "STOCK SALGADO..." está antes del primer encabezado: no es una sección.
+        if ($map !== null) {
+            $title = section_title($row);
+            if ($title !== '') {
+                $section = $title;
+                continue;
+            }
+        }
+        if ($map === null) {
             continue;
         }
-        $seen[$plate] = true;
-        $spec = vehicle_specs($brand, $model, $year);
-        $stock = preg_replace('/[^\d]/', '', (string) cell($row, $iId)) ?? '';
-        $out[] = [
-            'stockId' => $stock !== '' ? $stock : $plate,
-            'plate' => $plate,
-            'brand' => $brand,
-            'model' => strtoupper($model),
-            'color' => title_case((string) cell($row, $iColor)),
-            'year' => $year,
-            'price' => $price,
-            'mileage' => parse_km(cell($row, $iKm)),
-            'fuel' => $spec['fuel'],
-            'transmission' => $spec['transmission'],
-            'engine' => $spec['engine'],
-            'doors' => $spec['doors'],
-            'traction' => $spec['traction'],
-            'power' => $spec['power'],
-            'category' => guess_category($model),
-            'location' => title_case((string) cell($row, $iLoc)) ?: 'Patio',
-            'origin' => fold(cell($row, $iOrigin)) ?: 'STOCK',
-        ];
+        if (row_looks_shifted($row, $map)) {
+            $map = shift_map($map);
+        }
+        $vehicle = parse_vehicle_row($row, $map, $section);
+        if ($vehicle === null || isset($seen[$vehicle['plate']])) {
+            continue;
+        }
+        $seen[$vehicle['plate']] = true;
+        $out[] = $vehicle;
     }
-    return [$out, $driveFolder, true];
+    return [$out, $driveFolder, $map !== null];
 }
 
 function location_rank(string $loc): int
@@ -464,6 +733,79 @@ function heic_to_jpeg(string $bytes): ?string
     }
 }
 
+/** Patentes en el nombre de una carpeta. "ID 341" no es una patente. */
+function plates_in_folder_name(string $name): array
+{
+    $clean = preg_replace('/\bID\s*\d+\b/i', ' ', $name) ?? $name;
+    $found = [];
+    $whole = clean_plate($clean);
+    if ($whole !== '') {
+        $found[$whole] = true;
+    }
+    if (preg_match_all('/[A-Za-z]{2,4}[\s.\-]*\d{2,4}/', $clean, $m)) {
+        foreach ($m[0] as $tok) {
+            $plate = clean_plate($tok);
+            if ($plate !== '') {
+                $found[$plate] = true;
+            }
+        }
+    }
+    return array_keys($found);
+}
+
+/**
+ * Carpetas "ID 123" por id, y el resto por patente.
+ * El N° de las listas de abajo no entra: se repite y chocaría con "ID 8", "ID 10", etc.
+ *
+ * @param array<int, array{id?: string, name?: string, folder?: bool}> $entries
+ * @return array{id: array<string, array<int, array{id: string, name: string}>>, plate: array<string, array<int, array{id: string, name: string}>>}
+ */
+function index_drive_folders(array $entries): array
+{
+    $byId = [];
+    $byPlate = [];
+    foreach ($entries as $e) {
+        if (empty($e['folder'])) {
+            continue;
+        }
+        $name = (string) ($e['name'] ?? '');
+        $item = ['id' => (string) ($e['id'] ?? ''), 'name' => $name];
+        if (preg_match('/\bID\s*(\d+)\b/i', $name, $m)) {
+            $byId[$m[1]][] = $item;
+        }
+        foreach (plates_in_folder_name($name) as $plate) {
+            $byPlate[$plate][] = $item;
+        }
+    }
+    return ['id' => $byId, 'plate' => $byPlate];
+}
+
+function drive_folders_for_row(array $index, array $row): array
+{
+    if (!empty($row['hasSheetId'])) {
+        return $index['id'][$row['stockId']] ?? [];
+    }
+    return $index['plate'][$row['plate']] ?? [];
+}
+
+function salgado_sync_is_entry(): bool
+{
+    $self = realpath(__FILE__);
+    if ($self === false) {
+        return false;
+    }
+    $script = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    if ($script !== false && $script === $self) {
+        return true;
+    }
+    $arg = realpath((string) ($_SERVER['argv'][0] ?? ''));
+    return $arg !== false && $arg === $self;
+}
+
+if (!salgado_sync_is_entry()) {
+    return;
+}
+
 $lock = fopen(sys_get_temp_dir() . '/salgado-sync.lock', 'c');
 if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) {
     fwrite(STDOUT, "Ya hay un sync corriendo\n");
@@ -477,11 +819,7 @@ $runId = (int) $pdo->lastInsertId();
 try {
     $sheet = google_id(cfg('sheet_id'), '1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc');
     $tab = (string) cfg('sheet_tab', 'SALGADO AUTOMOTRIZ');
-    $csv = http_get("https://docs.google.com/spreadsheets/d/{$sheet}/gviz/tq?tqx=out:csv&sheet=" . rawurlencode($tab));
-    $head = strtolower(substr($csv, 0, 120));
-    if (str_contains($head, '<html') || str_contains($head, '<!doctype')) {
-        throw new RuntimeException('La planilla no está compartida como lectura pública');
-    }
+    $csv = sheet_csv($sheet, $tab);
     [$rows, $folderFromSheet, $hasHeader] = parse_salgado_rows(parse_csv_text($csv));
     if (!$hasHeader) {
         throw new RuntimeException("No está la pestaña {$tab}");
@@ -497,15 +835,11 @@ try {
     }
 
     $folderId = $folderFromSheet ?: google_id(cfg('drive_folder_id'), '1T_FkTaF9rFf97kM14MvdYzJHSYg-WLgo');
-    $folders = [];
+    $driveIndex = ['id' => [], 'plate' => []];
     $driveOk = true;
     try {
-        foreach (drive_listing($folderId) as $e) {
-            if ($e['folder'] && preg_match('/\bID\s*(\d+)\b/i', $e['name'], $m)) {
-                $folders[$m[1]][] = ['id' => $e['id'], 'name' => $e['name']];
-            }
-        }
-        logln('Drive índice: ' . count($folders) . ' carpetas con ID');
+        $driveIndex = index_drive_folders(drive_listing($folderId));
+        logln('Drive índice: ' . count($driveIndex['id']) . ' carpetas con ID, ' . count($driveIndex['plate']) . ' con patente');
     } catch (Throwable $e) {
         $driveOk = false;
         logln('Drive índice no disponible, se conservan las fotos actuales: ' . $e->getMessage());
@@ -514,9 +848,12 @@ try {
     usort($rows, fn ($a, $b) => location_rank($a['location']) <=> location_rank($b['location']));
 
     // 1) Fotos de Drive por unidad (antes de elegir destacados).
+    // Con ID se usa la carpeta "ID n". Sin ID (listas de abajo) se busca por patente.
+    // No se borra nada en Drive: solo se copian fotos nuevas al hosting.
     $budget = (int) cfg('sync_photo_budget', 150);
     foreach ($rows as &$r) {
-        $r['photos'] = merged_photo_ids($folders[$r['stockId']] ?? [], $r['stockId']);
+        $label = !empty($r['hasSheetId']) ? $r['stockId'] : $r['plate'];
+        $r['photos'] = merged_photo_ids(drive_folders_for_row($driveIndex, $r), $label);
     }
     unset($r);
 
