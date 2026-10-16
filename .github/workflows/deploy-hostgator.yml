@@ -1,0 +1,62 @@
+# Deploy automático a HostGator por FTPS en cada push a la rama hostgator.
+# Secrets requeridos (Settings > Secrets and variables > Actions):
+#   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
+# La config con credenciales (salgado-config.php) vive FUERA de public_html y nunca se sube.
+# No se borran archivos del servidor que no estén en el repo: uploads/ está excluido y
+# el action solo elimina lo que él mismo subió antes (estado en .ftp-deploy-sync-state.json).
+name: Deploy HostGator
+
+on:
+  push:
+    branches: [hostgator]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hostgator
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # next build (export estático con NEXT_PUBLIC_SITE_URL real) + arma public_html
+      # en hostgator/dist/salgado-hostgator/public_html (out/ + hostgator/public + api/)
+      - run: npm run build:hostgator
+
+      - name: Verificar que no va ninguna config con credenciales
+        run: |
+          cd hostgator/dist/salgado-hostgator/public_html
+          if find . -name 'salgado-config.php' -o -name 'config.php' -o -name '.env*' | grep -q .; then
+            echo "Archivo de config con credenciales en el paquete"; exit 1
+          fi
+
+      - name: Subir public_html por FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: hostgator/dist/salgado-hostgator/public_html/
+          # Si la cuenta FTP ya tiene como raíz public_html, cambiar a ./
+          server-dir: public_html/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            uploads/**
+            **/salgado-config.php
+            **/config.php
+            **/.env*
+            **/error_log
