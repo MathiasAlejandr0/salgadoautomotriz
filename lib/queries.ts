@@ -11,12 +11,21 @@ export type { VehicleFilters };
  * En el sitio publicado los componentes vuelven a pedir /api/vehicles (PHP + MySQL),
  * así que precios, ventas y autos nuevos se ven sin recompilar.
  */
-async function loadInventory(): Promise<VehicleWithImages[]> {
+/** El sitio público nunca muestra kilometraje: se borra antes de llegar a páginas/RSC. */
+function sinKilometraje(list: VehicleWithImages[]): VehicleWithImages[] {
+  return list.map((v) => ({ ...v, mileage: null }));
+}
+
+async function loadInventoryRaw(): Promise<VehicleWithImages[]> {
   const { loadSalgadoCatalog } = await import("@/lib/inventory/catalog");
   const sheet = await loadSalgadoCatalog();
   if (sheet.length) return sheet;
   if (!canUseMockFallback()) return [];
   return MOCK_VEHICLES;
+}
+
+async function loadInventory(): Promise<VehicleWithImages[]> {
+  return sinKilometraje(await loadInventoryRaw());
 }
 
 export const getVehicles = cache(async function getVehicles(filters?: VehicleFilters): Promise<VehicleWithImages[]> {

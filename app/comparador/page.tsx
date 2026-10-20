@@ -9,7 +9,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Comparador de vehículos",
-  description: "Compara precio, año, kilometraje y ficha técnica de hasta 3 vehículos lado a lado.",
+  description: "Compara precio, año y ficha técnica de hasta 3 vehículos lado a lado.",
   path: "/comparador",
 });
 

@@ -13,13 +13,20 @@ function public_image_path(string $p): string
 
 // ── Público ───────────────────────────────────────────────
 
+/** El sitio público nunca expone el kilometraje (se mantiene en BD y admin). */
+function public_vehicle(array $v): array
+{
+    unset($v['mileage']);
+    return $v;
+}
+
 function h_public_vehicles(): void
 {
     header('Cache-Control: public, max-age=60');
     $list = load_vehicles('v.published = 1', [], "CASE WHEN v.source = 'sheet' THEN v.sort_rank ELSE -1 END ASC, v.created_at DESC");
     http_response_code(200);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['vehicles' => $list], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(['vehicles' => array_map('public_vehicle', $list)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -29,7 +36,7 @@ function h_public_vehicle(string $slug): void
     if (!$list) {
         json_out(['error' => 'No encontrado'], 404);
     }
-    json_out(['vehicle' => $list[0]]);
+    json_out(['vehicle' => public_vehicle($list[0])]);
 }
 
 function h_public_reviews(): void
