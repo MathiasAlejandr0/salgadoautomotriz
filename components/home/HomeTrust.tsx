@@ -10,7 +10,7 @@ const PILLARS = [
   {
     n: "02",
     title: "Papeles al día",
-    desc: "Dominio, kilometraje y antecedentes claros: sin deudas ni multas que te sorprendan.",
+    desc: "Dominio y antecedentes claros: sin deudas ni multas que te sorprendan.",
   },
   {
     n: "03",

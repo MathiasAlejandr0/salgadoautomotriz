@@ -4,7 +4,7 @@ import { formatCLP, cn } from "@/lib/utils";
 import type { VehicleWithImages } from "@/types/database";
 import { resolveVehicleThumb } from "@/lib/images";
 import { calcCuota, pieMinimo } from "@/lib/financing";
-import { Fuel, Gauge, Calendar, Settings2 } from "lucide-react";
+import { Fuel, Calendar, Settings2 } from "lucide-react";
 
 interface VehicleCardProps {
   vehicle: VehicleWithImages;
@@ -42,13 +42,9 @@ export default function VehicleCard({ vehicle, glow = false }: VehicleCardProps)
           {vehicle.brand} {vehicle.model}
         </h3>
         <p className="mb-4 mt-1 text-xs text-white/50">{vehicle.version}</p>
-        <div className="mb-5 grid grid-cols-4 gap-1">
+        <div className="mb-5 grid grid-cols-3 gap-1">
           {[
             { icon: Calendar, text: String(vehicle.year) },
-            {
-              icon: Gauge,
-              text: vehicle.mileage != null ? `${Math.round(vehicle.mileage / 1000)}k` : "—",
-            },
             { icon: Fuel, text: vehicle.fuel?.slice(0, 3) ?? "—" },
             {
               icon: Settings2,

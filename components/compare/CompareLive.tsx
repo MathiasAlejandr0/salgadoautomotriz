@@ -15,7 +15,6 @@ const DASH = "Consultar";
 const ROWS: { label: string; get: (v: VehicleWithImages) => string }[] = [
   { label: "Precio", get: (v) => formatCLP(v.price) },
   { label: "Año", get: (v) => String(v.year) },
-  { label: "Kilometraje", get: (v) => (v.mileage != null ? `${v.mileage.toLocaleString("es-CL")} km` : DASH) },
   { label: "Categoría", get: (v) => v.category || DASH },
   { label: "Motor", get: (v) => v.engine || DASH },
   { label: "Potencia", get: (v) => v.power || DASH },

@@ -22,14 +22,6 @@ export default function JsonLdVehicle({ vehicle }: Props) {
     model: vehicle.model,
     vehicleModelDate: String(vehicle.year),
     itemCondition: "https://schema.org/UsedCondition",
-    mileageFromOdometer:
-      vehicle.mileage != null
-        ? {
-            "@type": "QuantitativeValue",
-            value: vehicle.mileage,
-            unitCode: "KMT",
-          }
-        : undefined,
     fuelType: vehicle.fuel ?? undefined,
     vehicleTransmission: vehicle.transmission ?? undefined,
     color: vehicle.color ?? undefined,

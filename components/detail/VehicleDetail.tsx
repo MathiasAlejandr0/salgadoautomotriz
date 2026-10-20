@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Calendar,
-  Gauge,
   Fuel,
   Settings2,
   ChevronLeft,
@@ -38,14 +37,6 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
   const cuota = calcCuota(monto, plazo);
 
   const SPECS = [
-    {
-      icon: Gauge,
-      label: "Kilometraje",
-      value:
-        vehicle.mileage != null
-          ? `${vehicle.mileage.toLocaleString("es-CL")} km`
-          : "Consultar",
-    },
     { icon: Settings2, label: "Transmisión", value: vehicle.transmission ?? "Consultar" },
     { icon: Fuel, label: "Combustible", value: vehicle.fuel ?? "Consultar" },
     { icon: Calendar, label: "Año", value: String(vehicle.year) },
@@ -113,7 +104,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 neon-border bg-[#0a1a2e]/80 rounded-2xl p-4">
+          <div className="grid grid-cols-3 gap-3 neon-border bg-[#0a1a2e]/80 rounded-2xl p-4">
             {SPECS.map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-center gap-2.5">
                 <div className="w-9 h-9 bg-[#050d18] rounded-lg flex items-center justify-center shrink-0 border border-[#16324f]">

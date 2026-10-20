@@ -39,7 +39,7 @@ const BENEFITS = [
   {
     icon: BadgeCheck,
     title: "Stock verificado",
-    desc: "Kilometraje y estado auditados, sin sorpresas.",
+    desc: "Estado y antecedentes auditados, sin sorpresas.",
   },
   {
     icon: Handshake,
