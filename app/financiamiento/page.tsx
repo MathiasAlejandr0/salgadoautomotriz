@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import FinancingCalculator, {
   FinancingTrustCards,
 } from "@/components/financiamiento/FinancingCalculator";
@@ -61,7 +60,6 @@ export default async function FinanciamientoPage() {
         </section>
       </main>
       <Footer />
-      <WhatsAppFloat />
     </>
   );
 }

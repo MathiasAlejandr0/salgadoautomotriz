@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import ContactForm from "@/components/contacto/ContactForm";
 import { Phone, Mail, MapPin, Clock } from "lucide-react";
 import { pageMetadata } from "@/lib/seo";
@@ -68,7 +67,6 @@ export default function ContactoPage() {
         </div>
       </main>
       <Footer />
-      <WhatsAppFloat />
     </>
   );
 }

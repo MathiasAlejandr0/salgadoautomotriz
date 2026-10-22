@@ -76,7 +76,7 @@ export default function FilterBar({
             className={cn(
               "rounded-full border px-4 py-2 text-sm font-semibold transition-all",
               activeCat === cat
-                ? "border-brand-accent bg-brand-accent text-[#041018]"
+                ? "border-white/30 bg-white/10 text-white"
                 : "border-brand-border bg-transparent text-brand-muted hover:border-brand-accent/40 hover:text-white"
             )}
           >

@@ -21,7 +21,7 @@ export default function HomeFinancingBanner() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href="/financiamiento"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-accent px-6 py-3 text-sm font-bold text-[#041018] transition-colors hover:bg-brand-accent2"
+              className="btn btn-primary"
             >
               Simular mi crédito <ArrowRight size={16} />
             </Link>
@@ -29,7 +29,7 @@ export default function HomeFinancingBanner() {
               href={waUrl("Hola, me interesa cotizar un financiamiento")}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white transition-colors hover:border-brand-accent/40"
+              className="btn btn-ghost"
             >
               <MessageCircle size={16} /> Consultar por WhatsApp
             </a>

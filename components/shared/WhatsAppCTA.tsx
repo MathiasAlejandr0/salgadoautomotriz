@@ -26,7 +26,7 @@ export default function WhatsAppCTA({
       href={waUrl(message)}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("btn-wa inline-flex items-center justify-center rounded-full", sizeClasses[size], className)}
+      className={cn("btn btn-wa", sizeClasses[size], className)}
     >
       <MessageCircle size={size === "sm" ? 14 : size === "lg" ? 20 : 16} />
       <span>{label}</span>

@@ -77,7 +77,7 @@ export default function ContactForm() {
       </div>
       <div className="flex flex-col sm:flex-row gap-3 pt-2">
         <button type="submit" disabled={loading}
-          className="flex-1 flex items-center justify-center gap-2 bg-[#00BCFE] hover:bg-[#00A5EF] disabled:opacity-60 text-[#071422] font-bold text-sm px-6 py-3.5 rounded-xl transition-colors">
+          className="btn btn-primary flex-1 disabled:opacity-60">
           <Send size={16} />
           {loading ? "Enviando…" : "Enviar mensaje"}
         </button>

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import ConsignaForm from "@/components/consigna/ConsignaForm";
 import { pageMetadata } from "@/lib/seo";
 import { SITE } from "@/lib/site";
@@ -57,7 +56,6 @@ export default function ConsignaPage() {
         </div>
       </main>
       <Footer />
-      <WhatsAppFloat />
     </>
   );
 }

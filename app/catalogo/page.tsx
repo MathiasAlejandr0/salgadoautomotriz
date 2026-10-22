@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import VehicleCard from "@/components/catalog/VehicleCard";
 import FilterBar from "@/components/catalog/FilterBar";
 import { getCatalogPage, type VehicleFilters } from "@/lib/queries";
@@ -111,7 +110,6 @@ export default async function CatalogoPage({ searchParams }: PageProps) {
         </div>
       </main>
       <Footer />
-      <WhatsAppFloat />
     </>
   );
 }

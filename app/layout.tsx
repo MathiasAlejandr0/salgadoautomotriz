@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import "./globals.css";
 import JsonLdCarDealer from "@/components/seo/JsonLdCarDealer";
 import GoogleAnalytics from "@/components/seo/GoogleAnalytics";
+import SupportChat from "@/components/shared/SupportChat";
 import { SITE } from "@/lib/site";
 import { OG_IMAGE, googleVerification } from "@/lib/seo";
 
@@ -69,6 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <GoogleAnalytics />
         </Suspense>
         {children}
+        <SupportChat />
       </body>
     </html>
   );

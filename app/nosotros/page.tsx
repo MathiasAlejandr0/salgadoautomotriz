@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Shield, Award, Users, Clock, MapPin, Phone, Mail } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import WhatsAppCTA, { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
+import WhatsAppCTA from "@/components/shared/WhatsAppCTA";
 import { pageMetadata } from "@/lib/seo";
 
 export const revalidate = 600;
@@ -119,7 +119,6 @@ export default function NosotrosPage() {
         </section>
       </main>
       <Footer />
-      <WhatsAppFloat />
     </>
   );
 }
