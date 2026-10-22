@@ -116,9 +116,7 @@ export default function HeroSearchForm({ options }: Props) {
           type="button"
           onClick={runSearch}
           className={cn(
-            "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg",
-            "bg-brand-accent text-[0.8125rem] font-bold text-[#041018]",
-            "transition hover:bg-brand-accent2"
+            "btn btn-primary btn-sm w-full rounded-[0.65rem]"
           )}
         >
           <Search size={13} strokeWidth={2.5} />

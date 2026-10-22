@@ -159,7 +159,7 @@ export default function ConsignaForm() {
           )}
           target="_blank"
           rel="noreferrer"
-          className="mt-6 inline-flex rounded-xl bg-brand-accent px-5 py-3 text-sm font-semibold text-[#041018] hover:bg-[#33c9fe]"
+          className="btn btn-wa mt-6"
         >
           Escribir por WhatsApp
         </a>
@@ -271,7 +271,7 @@ export default function ConsignaForm() {
         <button
           type="submit"
           disabled={busy}
-          className="rounded-xl bg-brand-accent py-3.5 font-semibold text-[#041018] hover:bg-[#33c9fe] disabled:opacity-60"
+          className="btn btn-primary w-full disabled:opacity-60"
         >
           {busy ? "Enviando…" : "Enviar consignación"}
         </button>

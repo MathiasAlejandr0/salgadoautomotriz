@@ -76,7 +76,7 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-[#00BCFE] py-3 font-bold text-[#041018] hover:bg-[#33cfff] disabled:opacity-60"
+            className="btn btn-primary w-full disabled:opacity-60"
           >
             {loading ? "Ingresando…" : "Ingresar"}
           </button>

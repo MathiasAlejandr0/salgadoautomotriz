@@ -40,13 +40,13 @@ export default function HomeTrust() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link
               href="/financiamiento"
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#00BCFE] px-6 py-3 text-sm font-bold text-[#041018]"
+              className="btn btn-primary min-h-11 px-6"
             >
               Ir al simulador
             </Link>
             <Link
               href="/catalogo"
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/80 hover:text-white"
+              className="btn btn-ghost min-h-11 px-6"
             >
               Ver vehículos
             </Link>
@@ -89,7 +89,7 @@ export default function HomeTrust() {
             <div className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
               <Link
                 href="/catalogo"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#00BCFE] px-7 py-3.5 text-sm font-bold text-[#041018]"
+                className="btn btn-primary min-h-12 px-7"
               >
                 Explorar catálogo
               </Link>
@@ -97,7 +97,7 @@ export default function HomeTrust() {
                 href={waUrl("Hola, quiero información sobre un vehículo de Salgado Automotriz.")}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-7 py-3.5 text-sm font-semibold text-white hover:bg-[#25D366]/20"
+                className="btn btn-wa min-h-12 px-7"
               >
                 Hablar por WhatsApp
               </a>

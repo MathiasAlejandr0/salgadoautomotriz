@@ -26,7 +26,7 @@ export default function WhatsAppCTA({
       href={waUrl(message)}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("btn-wa inline-flex items-center justify-center rounded-full", sizeClasses[size], className)}
+      className={cn("btn btn-wa", sizeClasses[size], className)}
     >
       <MessageCircle size={size === "sm" ? 14 : size === "lg" ? 20 : 16} />
       <span>{label}</span>
@@ -40,10 +40,10 @@ export function WhatsAppFloat() {
       href={waUrl("Hola, me interesa un vehículo")}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white transition hover:bg-[#1ebe57]"
+      className="support-chat-launcher"
       aria-label="WhatsApp"
     >
-      <MessageCircle size={26} />
+      <MessageCircle size={18} strokeWidth={1.75} />
     </a>
   );
 }

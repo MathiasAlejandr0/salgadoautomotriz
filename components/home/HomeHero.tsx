@@ -63,10 +63,7 @@ export default function HomeHero({ options }: Props) {
             <div className="sa-cta-row mt-6 sm:mt-7">
               <Link
                 href="/catalogo"
-                className={cn(
-                  "btn-hero-cyan inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-5",
-                  "text-[0.8125rem] font-bold sm:text-[0.875rem]"
-                )}
+                className="btn btn-primary h-10 shrink-0 px-5 text-[0.8125rem]"
               >
                 Ver inventario
                 <ArrowRight className="size-3.5" strokeWidth={2.5} />
@@ -77,10 +74,7 @@ export default function HomeHero({ options }: Props) {
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(
-                  "btn-hero-wa inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-5",
-                  "text-[0.8125rem] font-bold sm:text-[0.875rem]"
-                )}
+                className="btn btn-ghost h-10 shrink-0 px-5 text-[0.8125rem]"
               >
                 <MessageCircle className="size-3.5" strokeWidth={2.25} />
                 Hablar ahora
@@ -90,7 +84,7 @@ export default function HomeHero({ options }: Props) {
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20 px-5 pb-1 sm:px-6 lg:px-8">
+      <div className="absolute inset-x-0 bottom-16 z-20 px-5 pb-1 sm:bottom-0 sm:px-6 sm:pr-20 lg:px-8">
         <HeroSearchForm options={options} />
       </div>
     </section>

@@ -198,7 +198,7 @@ export default function VehicleDetail({ vehicle, heading, waMessage }: Props) {
                 href={waUrl(waMessage)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-wa w-full flex items-center justify-center gap-2 text-sm px-6 py-3.5 rounded-xl"
+                className="btn btn-wa w-full"
               >
                 <MessageCircle size={18} />
                 Escribir por WhatsApp
@@ -209,7 +209,7 @@ export default function VehicleDetail({ vehicle, heading, waMessage }: Props) {
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 border border-[#00BCFE]/45 hover:bg-[#00BCFE]/10 text-white font-semibold text-sm px-6 py-3.5 rounded-xl transition-colors"
+                className="btn btn-ghost w-full"
               >
                 <Calendar size={16} className="text-[#00BCFE]" />
                 Agendar visita
