@@ -1,7 +1,8 @@
 /**
  * Un auto que ya no está en la planilla sale del catálogo.
  * Sus URLs conocidas responden 410 en este dominio.
- * Fotos y recorridos se borran del almacenamiento en esa misma lectura.
+ * Se borran la copia del bucket vehicle-photos y la fila de Postgres.
+ * Google Drive no se borra: ahí solo se agrega.
  */
 
 export type MediaKind = "photo" | "tour";
@@ -9,8 +10,7 @@ export type MediaKind = "photo" | "tour";
 export type StoredMedia = {
   kind: MediaKind;
   url: string;
-  driveFileId: string | null;
-  storagePath: string | null;
+  storagePath: string;
 };
 
 export type PublicationRecord = {
@@ -29,26 +29,24 @@ export type RetiredCar = {
 const PLACEHOLDER = "placeholder-car.svg";
 const TOUR = /(^|[^a-z0-9])(360|tour|recorrido|spin)([^a-z0-9]|$)/i;
 
-export function driveFileId(url: string): string | null {
-  const fromHost = url.match(/googleusercontent\.com\/d\/([A-Za-z0-9_-]+)/);
-  if (fromHost) return fromHost[1];
-  const fromPath = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
-  if (fromPath) return fromPath[1];
-  const fromQuery = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
-  return fromQuery ? fromQuery[1] : null;
+/** Solo rutas del bucket. Un enlace de Drive o una ruta pública no se borra. */
+export function storageObjectPath(url: string): string | null {
+  const value = url.trim();
+  if (!value || value.includes(PLACEHOLDER)) return null;
+  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) return null;
+  return value;
 }
 
 export function mediaOf(unit: PublicationRecord): StoredMedia[] {
   const media: StoredMedia[] = [];
   for (const image of unit.vehicle_images ?? []) {
     const url = image.storage_path?.trim() ?? "";
-    if (!url || url.includes(PLACEHOLDER)) continue;
-    const remote = url.startsWith("http");
+    const storagePath = storageObjectPath(url);
+    if (!storagePath) continue;
     media.push({
-      kind: TOUR.test(url) ? "tour" : "photo",
+      kind: TOUR.test(storagePath) ? "tour" : "photo",
       url,
-      driveFileId: remote ? driveFileId(url) : null,
-      storagePath: remote || url.startsWith("/") ? null : url,
+      storagePath,
     });
   }
   return media;
@@ -103,26 +101,9 @@ export async function purgeRetiredMedia(
   return removed;
 }
 
-/** Borra el archivo donde esté: Drive si hay token, y el objeto de Storage si la ruta es del bucket. */
+/** Borra la copia en el bucket vehicle-photos. No llama a Drive. */
 export async function deleteStoredMedia(media: StoredMedia): Promise<void> {
-  if (media.driveFileId) await trashDriveFile(media.driveFileId);
-  if (media.storagePath) await removeStorageObject(media.storagePath);
-}
-
-async function trashDriveFile(id: string): Promise<void> {
-  const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN?.trim();
-  if (!token) {
-    console.error(`[inventario] sin GOOGLE_DRIVE_ACCESS_TOKEN; la foto ${id} salió del sitio pero sigue en Drive`);
-    return;
-  }
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok && response.status !== 404) {
-    console.error(`[inventario] Drive no borró ${id}: ${response.status}`);
-  }
+  await removeStorageObject(media.storagePath);
 }
 
 async function removeStorageObject(objectPath: string): Promise<void> {

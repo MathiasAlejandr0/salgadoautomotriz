@@ -18,16 +18,24 @@ function car(partial: Partial<PublicationRecord> & Pick<PublicationRecord, "slug
   };
 }
 
-const photo = "https://lh3.googleusercontent.com/d/FOTO123=w1600";
-const tour = "https://lh3.googleusercontent.com/d/TOURFILE/360.jpg";
+const drivePhoto = "https://lh3.googleusercontent.com/d/FOTO123=w1600";
+const driveTour = "https://lh3.googleusercontent.com/d/TOURFILE/360.jpg";
+const storagePhoto = "ranger/foto.jpg";
+const storageTour = "ranger/360/recorrido.jpg";
 
-test("un auto que sale de la planilla se retira con sus fotos y su recorrido", async () => {
+test("un auto que sale de la planilla borra solo las copias de Storage", async () => {
   const previous = [
     car({
       slug: "ford-ranger-4x4-rojo-2023-n5f603a",
       legacySlugs: ["ford-ranger-4x4-2023"],
       stock_id: "11",
-      vehicle_images: [{ storage_path: photo }, { storage_path: tour }, { storage_path: "/placeholder-car.svg" }],
+      vehicle_images: [
+        { storage_path: drivePhoto },
+        { storage_path: driveTour },
+        { storage_path: storagePhoto },
+        { storage_path: storageTour },
+        { storage_path: "/placeholder-car.svg" },
+      ],
     }),
     car({
       slug: "kia-morning-plateado-2015-14",
@@ -42,23 +50,26 @@ test("un auto que sale de la planilla se retira con sus fotos y su recorrido", a
   assert.equal(retired.length, 1);
   assert.deepEqual(retired[0].slugs.sort(), ["ford-ranger-4x4-2023", "ford-ranger-4x4-rojo-2023-n5f603a"]);
   assert.deepEqual(
-    retired[0].media.map((item) => item.kind),
-    ["photo", "tour"]
+    retired[0].media.map((item) => [item.kind, item.storagePath]),
+    [
+      ["photo", storagePhoto],
+      ["tour", storageTour],
+    ]
   );
-  assert.equal(retired[0].media[0].driveFileId, "FOTO123");
-  assert.equal(retired[0].media[1].driveFileId, "TOURFILE");
-  assert.equal(retired[0].media.find((item) => item.url.includes("placeholder")), undefined);
+  assert.equal(
+    retired[0].media.some((item) => item.url.includes("googleusercontent") || item.url.startsWith("http")),
+    false
+  );
 
   const deleted: StoredMedia[] = [];
   const removed = await purgeRetiredMedia(retired, async (media) => {
     deleted.push(media);
   });
-  assert.equal(removed.length, 2);
   assert.deepEqual(
-    deleted.map((item) => item.url),
-    [photo, tour]
+    removed.map((item) => item.storagePath),
+    [storagePhoto, storageTour]
   );
-  assert.equal(deleted.some((item) => item.url.includes("morning")), false);
+  assert.equal(deleted.some((item) => item.url.includes("morning") || item.url.includes("FOTO123")), false);
 
   const slugs = mergeRetiredSlugs([], retired, current);
   assert.ok(slugs.includes("ford-ranger-4x4-2023"));
@@ -66,7 +77,7 @@ test("un auto que sale de la planilla se retira con sus fotos y su recorrido", a
 });
 
 test("una planilla vacía no borra el stock", () => {
-  const previous = [car({ slug: "kia-morning-plateado-2015-14", stock_id: "14", vehicle_images: [{ storage_path: photo }] })];
+  const previous = [car({ slug: "kia-morning-plateado-2015-14", stock_id: "14", vehicle_images: [{ storage_path: drivePhoto }] })];
   assert.deepEqual(planRetirement(previous, []), []);
 });
 

@@ -181,7 +181,7 @@ function preserveKnownPhotos(previous: StockUnit[] | undefined, next: StockUnit[
   });
 }
 
-/** La planilla manda. Lo que falta se retira en esta lectura: sin ficha, sin fotos, sin recorrido. */
+/** La planilla manda. Lo que falta sale del sitio. Drive no se borra. */
 async function commitSheet(rows: SheetVehicle[], photos: Map<string, string[]> | null): Promise<StockUnit[]> {
   const previous = (await readCache()) ?? memory;
   const assembled = assemble(rows, photos ?? new Map());
