@@ -1,34 +1,27 @@
 import { modelYearSlug, type StockUnit } from "@/lib/vehicle-public";
 import { stripTrailingPlate } from "@/lib/plates";
+import { unidadesPageFor } from "@/lib/unidades-pages";
 
-const SITES = {
-  rg: "https://www.rgmotorschile.cl",
-  unidades: "https://www.unidadeschile.cl",
-} as const;
+const RG_SITEMAP = "https://www.rgmotorschile.cl/sitemap.xml";
 
-type SisterKey = keyof typeof SITES;
-
-let cache: { savedAt: number; lists: Record<SisterKey, string[]> } | null = null;
+let rgCache: { savedAt: number; urls: string[] } | null = null;
 const TTL_MS = 60 * 60 * 1000;
 
-async function loadList(origin: string): Promise<string[]> {
-  const response = await fetch(`${origin}/sitemap.xml`, {
-    headers: { "User-Agent": "SalgadoAutomotriz/1.0" },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok) return [];
-  const xml = await response.text();
-  return [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1].trim());
-}
-
-async function lists(): Promise<Record<SisterKey, string[]>> {
-  if (cache && Date.now() - cache.savedAt < TTL_MS) return cache.lists;
-  const [rg, unidades] = await Promise.all([
-    loadList(SITES.rg).catch(() => [] as string[]),
-    loadList(SITES.unidades).catch(() => [] as string[]),
-  ]);
-  cache = { savedAt: Date.now(), lists: { rg, unidades } };
-  return cache.lists;
+async function rgUrls(): Promise<string[]> {
+  if (rgCache && Date.now() - rgCache.savedAt < TTL_MS) return rgCache.urls;
+  try {
+    const response = await fetch(RG_SITEMAP, {
+      headers: { "User-Agent": "SalgadoAutomotriz/1.0" },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) return [];
+    const xml = await response.text();
+    const urls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1].trim());
+    rgCache = { savedAt: Date.now(), urls };
+    return urls;
+  } catch {
+    return rgCache?.urls ?? [];
+  }
 }
 
 function matchUrl(urls: string[], plate: string, identity: string): string | null {
@@ -44,15 +37,20 @@ function matchUrl(urls: string[], plate: string, identity: string): string | nul
 }
 
 export async function sisterUrlFor(unit: StockUnit): Promise<string | null> {
-  if (unit.branch !== "rg" && unit.branch !== "unidades") return null;
-  const all = await lists();
-  return matchUrl(all[unit.branch], unit.plate ?? "", modelYearSlug(unit.brand, unit.model, unit.year));
+  if (unit.branch === "unidades") return unidadesPageFor(unit);
+  if (unit.branch !== "rg") return null;
+  return matchUrl(await rgUrls(), unit.plate ?? "", modelYearSlug(unit.brand, unit.model, unit.year));
 }
 
 /** Auto que ya no está en esta planilla, pero sigue publicado en otra sucursal. */
 export async function sisterUrlByPlate(plate: string): Promise<string | null> {
-  const all = await lists();
-  const rg = matchUrl(all.rg, plate, "");
-  if (rg) return rg;
-  return matchUrl(all.unidades, plate, "");
+  const onUnidades = unidadesPageFor({
+    plate,
+    brand: "",
+    model: "",
+    year: 0,
+    price: 0,
+  });
+  if (onUnidades) return onUnidades;
+  return matchUrl(await rgUrls(), plate, "");
 }

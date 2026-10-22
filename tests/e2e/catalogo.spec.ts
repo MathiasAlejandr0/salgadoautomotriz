@@ -96,6 +96,47 @@ test("catálogo, ficha, WhatsApp y Open Graph", async ({ page, request }) => {
   expect(home.body).not.toMatch(/property="og:image" content="[^"]+\.svg/);
 });
 
+test("autos de Unidades Chile van a su ficha real", async ({ request }) => {
+  const published = [
+    [
+      "/catalogo/detalle/mitsubishi-l200-katana-crt-4x4-2019",
+      "https://www.unidadeschile.cl/catalogo/mitsubishi-l200-katana-crt-4x4-2019-lpcg80",
+    ],
+    [
+      "/catalogo/detalle/nissan-navara-4x2-2023",
+      "https://www.unidadeschile.cl/catalogo/nissan-navara-4x2-2023-sjtd29",
+    ],
+    [
+      "/catalogo/detalle/suzuki-jimny-mt-4x4-15-2023",
+      "https://www.unidadeschile.cl/catalogo/suzuki-jimny-mt-4x4-1-5-2023-sxkk11",
+    ],
+  ] as const;
+
+  for (const [path, destination] of published) {
+    const response = await request.get(path, {
+      maxRedirects: 0,
+      headers: { "user-agent": GOOGLEBOT },
+    });
+    expect(response.status(), path).toBe(301);
+    expect(response.headers().location, path).toBe(destination);
+  }
+
+  // Están marcados Uni Chile en la planilla, pero el catálogo vivo de
+  // unidadeschile.cl no los publica. La URL directa dice "Unidad no encontrada".
+  for (const path of [
+    "/catalogo/detalle/chevrolet-tracker-2022-rzkv76",
+    "/catalogo/detalle/ford-ranger-4x4-2023",
+    "/catalogo/detalle/kia-morning-2015",
+  ]) {
+    const response = await request.get(path, {
+      maxRedirects: 0,
+      headers: { "user-agent": GOOGLEBOT },
+    });
+    expect(response.status(), path).toBe(410);
+    expect((await response.text()).toLowerCase(), path).not.toContain("no encontrado");
+  }
+});
+
 test("un slug inexistente responde 404", async ({ request }) => {
   const response = await request.get("/catalogo/detalle/auto-que-no-existe-2099", {
     headers: { "user-agent": GOOGLEBOT },
