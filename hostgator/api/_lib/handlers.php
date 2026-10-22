@@ -39,7 +39,7 @@ function h_public_vehicles(): void
     header('Cache-Control: public, max-age=60');
     $vehicles = [];
     foreach (published_identity() as $item) {
-        $vehicles[] = public_vehicle($item['row'], $item['slug']);
+        $vehicles[] = public_vehicle($item['row'], prefer_static_slug($item['row'], $item['slug']));
     }
     http_response_code(200);
     header('Content-Type: application/json; charset=utf-8');
@@ -52,7 +52,7 @@ function h_public_vehicle(string $slug): void
     $slug = strtolower($slug);
     foreach (published_identity() as $item) {
         if ($item['slug'] === $slug || in_array($slug, $item['legacy'], true)) {
-            json_out(['vehicle' => public_vehicle($item['row'], $item['slug'])]);
+            json_out(['vehicle' => public_vehicle($item['row'], prefer_static_slug($item['row'], $item['slug']))]);
         }
     }
     json_out(['error' => 'No encontrado'], 404);
@@ -71,6 +71,28 @@ function static_vehicle_index(): array
 function index_match_key(string $brand, string $model, int $year, int $price): string
 {
     return slugify($brand) . '|' . slugify($model) . '|' . $year . '|' . $price;
+}
+
+/** Si el build estático ya publicó este auto, el sitemap y la API usan ese slug. */
+function prefer_static_slug(array $row, string $computed): string
+{
+    $index = static_vehicle_index();
+    if (!$index) {
+        return $computed;
+    }
+    $key = index_match_key((string) ($row['brand'] ?? ''), (string) ($row['model'] ?? ''), (int) ($row['year'] ?? 0), (int) ($row['price'] ?? 0));
+    $hits = [];
+    foreach ($index as $entry) {
+        if (!is_array($entry) || empty($entry['slug'])) {
+            continue;
+        }
+        $entryKey = index_match_key((string) ($entry['brand'] ?? ''), (string) ($entry['model'] ?? ''), (int) ($entry['year'] ?? 0), (int) ($entry['price'] ?? 0));
+        if ($entryKey === $key) {
+            $hits[] = strtolower((string) $entry['slug']);
+        }
+    }
+    $hits = array_values(array_unique($hits));
+    return count($hits) === 1 ? $hits[0] : $computed;
 }
 
 function redirect_local(string $slug): void
@@ -882,7 +904,8 @@ function h_sitemap(): void
     }
     foreach (published_identity() as $item) {
         $mod = substr((string) $item['row']['updated_at'], 0, 10);
-        $xml .= '<url><loc>' . esc($base . '/catalogo/detalle/' . $item['slug']) . "</loc><lastmod>{$mod}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+        $slug = prefer_static_slug($item['row'], $item['slug']);
+        $xml .= '<url><loc>' . esc($base . '/catalogo/detalle/' . $slug) . "</loc><lastmod>{$mod}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
     }
     $xml .= "</urlset>\n";
     http_response_code(200);
