@@ -4,6 +4,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { resolveVehicleImage } from "@/lib/images";
 import { createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
+import { stripPlateMentions, stripTrailingPlate } from "@/lib/plates";
 import {
   deleteAdminVehicle,
   ensureAdminVehicles,
@@ -125,7 +126,7 @@ function toInsert(input: Partial<AdminVehicle>, slug: string): VehicleInsert {
 
   const flags = publishFlags(normalizeStatus(input.status), Boolean(input.featured));
   return {
-    slug,
+    slug: stripTrailingPlate(slug).bare || slug,
     brand,
     model,
     year,
@@ -138,7 +139,7 @@ function toInsert(input: Partial<AdminVehicle>, slug: string): VehicleInsert {
     doors,
     engine: input.engine?.trim() || null,
     price: Math.round(price),
-    description: input.description?.trim() || null,
+    description: input.description ? stripPlateMentions(input.description).trim() || null : null,
     plate: input.plate?.trim() || null,
     stock_id: input.stock_id?.trim() || null,
     location: input.location?.trim() || null,

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { VehicleWithImages } from "@/types/database";
 import { slugify } from "@/lib/utils";
+import { annotateStock, type StockUnit } from "@/lib/vehicle-public";
 import { drivePhotosFolderId, fetchSalgadoSheet, type SheetVehicle } from "@/lib/inventory/sheet";
 import { indexPhotoFolders, listDriveFolder, photoUrlsForFolder } from "@/lib/inventory/drive";
 
@@ -17,11 +18,12 @@ const PLACEHOLDER = "/placeholder-car.svg";
 
 type CacheFile = {
   savedAt: number;
-  vehicles: VehicleWithImages[];
+  vehicles: StockUnit[];
 };
 
 let memory: CacheFile | null = null;
-let inflight: Promise<VehicleWithImages[]> | null = null;
+let inflight: Promise<StockUnit[]> | null = null;
+let stockMemory: { savedAt: number; units: StockUnit[] } | null = null;
 
 function locationRank(location: string): number {
   const value = location.toUpperCase();
@@ -32,15 +34,17 @@ function locationRank(location: string): number {
 }
 
 function markFeatured(list: VehicleWithImages[]): VehicleWithImages[] {
-  const patio = list.filter((v) => /patio/i.test(v.description ?? ""));
+  const patio = list.filter((v) => /patio|cardonal|salgado/i.test(v.location ?? ""));
   const pool = (patio.length >= 3 ? patio : list).slice().sort((a, b) => b.price - a.price);
   const featured = new Set(pool.slice(0, 3).map((v) => v.id));
   return list.map((v) => ({ ...v, featured: featured.has(v.id) }));
 }
 
-function toVehicle(row: SheetVehicle, photos: string[], now: string): VehicleWithImages {
-  const slug = slugify(`${row.brand} ${row.model} ${row.year} ${row.plate}`);
-  const id = `sa-${row.stockId}`;
+function toVehicle(row: SheetVehicle, photos: string[], now: string, sequence: number): VehicleWithImages {
+  const legacy = row.plate
+    ? slugify(`${row.brand} ${row.model} ${row.year} ${row.plate}`)
+    : slugify(`${row.brand} ${row.model} ${row.year}`);
+  const id = `sa-${row.stockId || "x"}-${sequence}`;
   const images = (photos.length ? photos : [PLACEHOLDER]).map((storagePath, index) => ({
     id: `${id}-img-${index}`,
     vehicle_id: id,
@@ -51,7 +55,7 @@ function toVehicle(row: SheetVehicle, photos: string[], now: string): VehicleWit
 
   return {
     id,
-    slug,
+    slug: legacy,
     brand: row.brand,
     model: row.model,
     year: row.year,
@@ -64,10 +68,10 @@ function toVehicle(row: SheetVehicle, photos: string[], now: string): VehicleWit
     doors: null,
     engine: null,
     price: row.price,
-    description: `Patente ${row.plate}. Ubicación: ${row.location}. Origen: ${row.origin}.`,
-    plate: row.plate,
-    stock_id: row.stockId,
-    location: row.location,
+    description: "",
+    plate: row.plate || null,
+    stock_id: row.stockId || null,
+    location: row.location || null,
     origin: row.origin,
     status: "Disponible",
     published: true,
@@ -115,6 +119,16 @@ async function photosByStockId(rows: SheetVehicle[], folderId: string): Promise<
   return new Map(pairs);
 }
 
+function asStock(vehicles: VehicleWithImages[]): StockUnit[] | null {
+  if (!vehicles.length) return null;
+  const ready = vehicles.every(
+    (vehicle) =>
+      typeof (vehicle as StockUnit).branch === "string" &&
+      Array.isArray((vehicle as StockUnit).legacySlugs)
+  );
+  return ready ? (vehicles as StockUnit[]) : null;
+}
+
 async function readCache(): Promise<CacheFile | null> {
   if (memory && Date.now() - memory.savedAt < TTL_MS && memory.vehicles.length) return memory;
   for (const filePath of CACHE_PATHS) {
@@ -123,8 +137,10 @@ async function readCache(): Promise<CacheFile | null> {
       const parsed = JSON.parse(raw) as CacheFile;
       if (!Array.isArray(parsed.vehicles) || typeof parsed.savedAt !== "number") continue;
       if (!parsed.vehicles.length) continue;
-      memory = parsed;
-      return parsed;
+      const stock = asStock(parsed.vehicles);
+      if (!stock) continue;
+      memory = { savedAt: parsed.savedAt, vehicles: stock };
+      return memory;
     } catch {
       // el disco de la función puede ser de solo lectura
     }
@@ -144,12 +160,30 @@ async function writeCache(file: CacheFile): Promise<void> {
   }
 }
 
-async function refresh(): Promise<VehicleWithImages[]> {
+function assemble(rows: SheetVehicle[], photos: Map<string, string[]>): StockUnit[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.stockId) continue;
+    counts.set(row.stockId, (counts.get(row.stockId) ?? 0) + 1);
+  }
+  const now = new Date().toISOString();
+  const ordered = rows.slice().sort((a, b) => locationRank(a.location) - locationRank(b.location));
+  const vehicles = markFeatured(
+    ordered.map((row, index) => {
+      const ownPhotos =
+        row.stockId && counts.get(row.stockId) === 1 ? (photos.get(row.stockId) ?? []) : [];
+      return toVehicle(row, ownPhotos, now, index);
+    })
+  );
+  if (!vehicles.length) throw new Error("La pestaña Salgado no tiene unidades vendibles");
+  return annotateStock(vehicles);
+}
+
+async function refresh(): Promise<StockUnit[]> {
   const previous = await readCache();
   try {
     const { vehicles: rows, driveFolderId } = await fetchSalgadoSheet();
     const folderId = driveFolderId || drivePhotosFolderId();
-    const now = new Date().toISOString();
     let photos = new Map<string, string[]>();
     try {
       photos = await photosByStockId(rows, folderId);
@@ -157,12 +191,9 @@ async function refresh(): Promise<VehicleWithImages[]> {
       console.error("[drive] índice de fotos", err);
     }
 
-    const ordered = rows
-      .slice()
-      .sort((a, b) => locationRank(a.location) - locationRank(b.location));
-    const vehicles = markFeatured(ordered.map((row) => toVehicle(row, photos.get(row.stockId) ?? [], now)));
-    if (!vehicles.length) throw new Error("La pestaña Salgado no tiene unidades vendibles");
+    const vehicles = assemble(rows, photos);
     await writeCache({ savedAt: Date.now(), vehicles });
+    stockMemory = { savedAt: Date.now(), units: assemble(rows, new Map()) };
     return vehicles;
   } catch (err) {
     console.error("[salgado] sync", err);
@@ -171,8 +202,25 @@ async function refresh(): Promise<VehicleWithImages[]> {
   }
 }
 
+/** Fichas sin fotos. Sirve para redirects: no espera a Drive. */
+export async function loadStockRecords(): Promise<StockUnit[]> {
+  if (stockMemory && Date.now() - stockMemory.savedAt < TTL_MS && stockMemory.units.length) {
+    return stockMemory.units;
+  }
+  try {
+    const { vehicles: rows } = await fetchSalgadoSheet();
+    const units = assemble(rows, new Map());
+    stockMemory = { savedAt: Date.now(), units };
+    return units;
+  } catch (err) {
+    console.error("[salgado] stock", err);
+    if (stockMemory?.units.length) return stockMemory.units;
+    return [];
+  }
+}
+
 /** Inventario vivo: pestaña SALGADO AUTOMOTRIZ + fotos Drive por ID. */
-export async function loadSalgadoCatalog(): Promise<VehicleWithImages[]> {
+export async function loadSalgadoCatalog(): Promise<StockUnit[]> {
   const cached = await readCache();
   if (cached && Date.now() - cached.savedAt < TTL_MS && cached.vehicles.length) {
     return cached.vehicles;

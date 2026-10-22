@@ -2,8 +2,8 @@ import { cache } from "react";
 import type { VehicleWithImages, Review } from "@/types/database";
 import { MOCK_REVIEWS, MOCK_VEHICLES } from "@/lib/mock-data";
 import { canUseMockFallback, isSupabaseConfigured } from "@/lib/env";
-import { sanitizeSearchTerm } from "@/lib/validation";
 import { createPublicClient } from "@/lib/supabase/public";
+import { annotateStock, forPublic, onSalgadoSite, type StockUnit } from "@/lib/vehicle-public";
 
 export type VehicleFilters = {
   brand?: string;
@@ -35,12 +35,12 @@ function applyFilters(
   return sortVehicles(next, filters?.sort);
 }
 
-async function loadInventory(): Promise<VehicleWithImages[]> {
+async function loadInventory(): Promise<StockUnit[]> {
   const { loadSalgadoCatalog } = await import("@/lib/inventory/catalog");
   const sheet = await loadSalgadoCatalog();
   if (sheet.length) return sheet;
   if (!canUseMockFallback()) return [];
-  return MOCK_VEHICLES;
+  return annotateStock(MOCK_VEHICLES);
 }
 
 function sortVehicles(
@@ -77,73 +77,45 @@ async function fromSupabase<T>(
   }
 }
 
-function hasActiveFilters(filters?: VehicleFilters): boolean {
-  return Boolean(
-    filters?.brand ||
-      filters?.category ||
-      filters?.yearMin ||
-      filters?.yearMax ||
-      filters?.priceMax ||
-      filters?.search
-  );
-}
-
-/** Planilla solo si la tabla no existe o todavía no hay ninguna unidad. */
-async function inventoryOrSheet(
-  remote: VehicleWithImages[] | null,
-  filters: VehicleFilters | undefined,
-  probeEmpty: () => Promise<boolean>
-): Promise<VehicleWithImages[]> {
-  if (remote && remote.length > 0) return remote;
-  if (remote && hasActiveFilters(filters)) {
-    const emptyTable = await probeEmpty();
-    if (!emptyTable) return [];
-  }
-  return applyFilters(await loadInventory(), filters);
-}
-
 export async function getFeaturedVehicles(limit = 6): Promise<VehicleWithImages[]> {
   const all = await getVehicles();
   return all.filter((v) => v.featured && v.published).slice(0, limit);
 }
 
-export const getVehicles = cache(async function getVehicles(filters?: VehicleFilters): Promise<VehicleWithImages[]> {
+async function loadAllUnits(): Promise<StockUnit[]> {
   if (!isSupabaseConfigured()) {
-    return applyFilters(await loadInventory(), filters);
+    return loadInventory();
   }
 
   const supabase = createPublicClient();
-  let query = supabase
-    .from("vehicles")
-    .select("*, vehicle_images(*)")
-    .eq("published", true)
-    .order("created_at", { ascending: false });
+  const data = await fromSupabase("vehicles", async () =>
+    supabase
+      .from("vehicles")
+      .select("*, vehicle_images(*)")
+      .eq("published", true)
+      .order("created_at", { ascending: false })
+  );
+  const remote = data as VehicleWithImages[] | null;
+  if (remote && remote.length > 0) return annotateStock(remote);
+  return loadInventory();
+}
 
-  if (filters?.brand) query = query.eq("brand", filters.brand);
-  if (filters?.category) query = query.eq("category", filters.category);
-  if (filters?.yearMin) query = query.gte("year", filters.yearMin);
-  if (filters?.yearMax) query = query.lte("year", filters.yearMax);
-  if (filters?.priceMax) query = query.lte("price", filters.priceMax);
-  if (filters?.search) {
-    const q = sanitizeSearchTerm(filters.search);
-    if (q) {
-      query = query.or(`brand.ilike.%${q}%,model.ilike.%${q}%`);
-    }
-  }
+export const getStockUnits = cache(loadAllUnits);
 
-  const data = await fromSupabase("vehicles", async () => query);
-  const list = await inventoryOrSheet(data as VehicleWithImages[] | null, filters, async () => {
-    const probe = await fromSupabase("vehicles-probe", async () =>
-      supabase.from("vehicles").select("id").limit(1)
-    );
-    return !probe || (probe as { id: string }[]).length === 0;
-  });
-  return sortVehicles(list, filters?.sort);
+export const getVehicles = cache(async function getVehicles(filters?: VehicleFilters): Promise<VehicleWithImages[]> {
+  const list = (await getStockUnits()).filter(onSalgadoSite).map(forPublic);
+  return applyFilters(list, filters);
 });
 
 export const getVehicleBySlug = cache(async function getVehicleBySlug(slug: string): Promise<VehicleWithImages | null> {
+  let key = slug.trim().toLowerCase();
+  try {
+    key = decodeURIComponent(key);
+  } catch {
+    return null;
+  }
   const all = await getVehicles();
-  return all.find((v) => v.slug === slug && v.published) ?? null;
+  return all.find((vehicle) => vehicle.slug.toLowerCase() === key && vehicle.published) ?? null;
 });
 
 export const getPublishedReviews = cache(async function getPublishedReviews(limit = 6): Promise<Review[]> {

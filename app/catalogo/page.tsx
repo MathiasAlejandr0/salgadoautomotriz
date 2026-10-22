@@ -94,8 +94,8 @@ export default async function CatalogoPage({ searchParams }: PageProps) {
 
           {vehicles.length > 0 ? (
             <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 md:gap-6">
-              {vehicles.map((veh, i) => (
-                <VehicleCard key={veh.id} vehicle={veh} glow={i === 1} />
+              {vehicles.map((veh) => (
+                <VehicleCard key={veh.id} vehicle={veh} />
               ))}
             </div>
           ) : (

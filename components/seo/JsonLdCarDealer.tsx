@@ -1,15 +1,18 @@
 import { SITE } from "@/lib/site";
+import { absoluteUrl } from "@/lib/seo";
 import { jsonLd } from "@/lib/html";
 
 export default function JsonLdCarDealer() {
-  const data: Record<string, unknown> = {
-    "@context": "https://schema.org",
-    "@type": "CarDealer",
+  const dealerId = `${SITE.url}/#dealer`;
+  const websiteId = `${SITE.url}/#website`;
+  const dealer: Record<string, unknown> = {
+    "@type": "AutoDealer",
+    "@id": dealerId,
     name: SITE.name,
     url: SITE.url,
     telephone: SITE.phone,
     email: SITE.email,
-    image: `${SITE.url}/og.png`,
+    image: absoluteUrl("/og.png"),
     address: {
       "@type": "PostalAddress",
       streetAddress: SITE.addressLine,
@@ -39,7 +42,7 @@ export default function JsonLdCarDealer() {
   };
 
   if (SITE.googleRating && SITE.googleRatingCount) {
-    data.aggregateRating = {
+    dealer.aggregateRating = {
       "@type": "AggregateRating",
       ratingValue: SITE.googleRating,
       bestRating: "5",
@@ -47,10 +50,27 @@ export default function JsonLdCarDealer() {
     };
   }
 
+  const data = {
+    "@context": "https://schema.org",
+    "@graph": [
+      dealer,
+      {
+        "@type": "WebSite",
+        "@id": websiteId,
+        name: SITE.name,
+        url: SITE.url,
+        inLanguage: "es-CL",
+        publisher: { "@id": dealerId },
+        potentialAction: {
+          "@type": "SearchAction",
+          target: `${SITE.url}/catalogo?search={search_term_string}`,
+          "query-input": "required name=search_term_string",
+        },
+      },
+    ],
+  };
+
   return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: jsonLd(data) }}
-    />
+    <script type="application/ld+json">{jsonLd(data)}</script>
   );
 }
