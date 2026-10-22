@@ -2,13 +2,17 @@ import { normalizePlate } from "@/lib/plates";
 import { slugify } from "@/lib/utils";
 
 /**
- * Fichas confirmadas en https://www.rgmotorschile.cl.
+ * Único 301 entre sitios.
  *
- * El Ranger 4x4 2023 (SHYL53) está en RG Motors. La planilla de Salgado
- * lo marca Uni Chile y no trae patente, así que el match es marca-modelo-año.
+ * Mathias confirmó que el Ranger 4x4 2023 (SHYL53) está en RG Motors.
+ * La planilla de Salgado lo marca Uni Chile y no trae patente, así que
+ * el match es marca-modelo-año. El resto de las filas de esta planilla
+ * se publican aquí aunque también estén en otra planilla.
+ *
  * El destino es el slug sin patente de
  * https://github.com/RgMotorsChile/RgMotorsChileWeb/pull/34
- * (`lib/vehicles/publicSlug.ts`, `publicVehicleSlug`):
+ * (`lib/vehicles/publicSlug.ts`, `publicVehicleSlug`), el mismo que
+ * docs/stock-sucursal.csv anota en url_rg:
  * ford-ranger-4x4-2023-shyl53 → ford-ranger-4x4-rojo-2023-7cm3a8.
  * La versión aporta el tramo "rojo". El id corto no es la patente.
  */

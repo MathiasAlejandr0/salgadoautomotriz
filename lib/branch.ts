@@ -5,6 +5,11 @@ export type Branch = "salgado" | "rg" | "unidades" | "pendiente";
  * Cardonal es el patio de Salgado. RG Motors y Unidades Chile
  * se nombran aparte en la misma columna. Vacío queda pendiente:
  * no se adivina la sucursal.
+ *
+ * Esta etiqueta no saca el auto del sitio. Si la fila sigue en la
+ * planilla de Salgado, la ficha se publica aquí aunque también
+ * esté en otra planilla. La única salida confirmada es el Ranger
+ * SHYL53, en lib/rg-pages.ts.
  */
 export function branchOf(location: string | null | undefined): Branch {
   const value = (location ?? "")
@@ -18,9 +23,4 @@ export function branchOf(location: string | null | undefined): Branch {
   if (/UNIDAD|UNI CHILE|REGIMIENTO/.test(value)) return "unidades";
   if (/CARDONAL|SALGADO|PATIO|CLIENTE/.test(value)) return "salgado";
   return "pendiente";
-}
-
-/** Publicado en este dominio. Pendiente se queda hasta que Mathias confirme. */
-export function publishedOnSalgado(branch: Branch): boolean {
-  return branch === "salgado" || branch === "pendiente";
 }

@@ -96,71 +96,19 @@ test("catálogo, ficha, WhatsApp y Open Graph", async ({ page, request }) => {
   expect(home.body).not.toMatch(/property="og:image" content="[^"]+\.svg/);
 });
 
-test("autos de Unidades Chile van a su ficha real", async ({ request }) => {
-  const published = [
-    [
-      "/catalogo/detalle/mitsubishi-l200-katana-crt-4x4-2019",
-      "https://www.unidadeschile.cl/catalogo/mitsubishi-l200-katana-crt-4x4-2019-pq8ymm",
-    ],
-    [
-      "/catalogo/detalle/nissan-navara-4x2-2023",
-      "https://www.unidadeschile.cl/catalogo/nissan-navara-4x2-2023-972gf4",
-    ],
-    [
-      "/catalogo/detalle/suzuki-jimny-mt-4x4-15-2023",
-      "https://www.unidadeschile.cl/catalogo/suzuki-jimny-mt-4x4-1-5-2023-m6wn76",
-    ],
-  ] as const;
-
-  for (const [path, destination] of published) {
-    const response = await request.get(path, {
-      maxRedirects: 0,
-      headers: { "user-agent": GOOGLEBOT },
-    });
-    expect(response.status(), path).toBe(301);
-    expect(response.headers().location, path).toBe(destination);
-  }
-
-  const ranger = await request.get("/catalogo/detalle/ford-ranger-4x4-2023", {
-    maxRedirects: 0,
-    headers: { "user-agent": GOOGLEBOT },
-  });
-  expect(ranger.status()).toBe(301);
-  expect(ranger.headers().location).toBe(
-    "https://www.rgmotorschile.cl/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
-  );
-  const rangerCanonical = await request.get("/catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a", {
-    maxRedirects: 0,
-    headers: { "user-agent": GOOGLEBOT },
-  });
-  expect(rangerCanonical.status()).toBe(301);
-  expect(rangerCanonical.headers().location).toBe(
-    "https://www.rgmotorschile.cl/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
-  );
-
-  // Marcado Uni Chile en la planilla, pero unidadeschile.cl no lo publica.
-  const morning = await request.get("/catalogo/detalle/kia-morning-2015", {
-    maxRedirects: 0,
-    headers: { "user-agent": GOOGLEBOT },
-  });
-  expect(morning.status()).toBe(410);
-  expect((await morning.text()).toLowerCase()).not.toContain("no encontrado");
-});
-
-test("Tucson, Spark y Tracker se quedan en Salgado", async ({ request }) => {
+test("un auto que sigue en la planilla se publica aquí", async ({ request }) => {
   const stays = [
-    [
-      "/catalogo/detalle/chevrolet-tracker-2022-rzkv76",
-      "/catalogo/detalle/chevrolet-tracker-blanco-2022-299",
-    ],
-    [
-      "/catalogo/detalle/hyundai-tucson-gl-20-2014-ghtd24",
-      "/catalogo/detalle/hyundai-tucson-gl-20-blanco-2014-231",
-    ],
-    [
-      "/catalogo/detalle/chevrolet-spark-gt-lt-12-2016-hlxb59",
-      "/catalogo/detalle/chevrolet-spark-gt-lt-12-verde-cocktail-2016-300",
-    ],
+    ["/catalogo/detalle/chevrolet-tracker-2022-rzkv76", "/catalogo/detalle/chevrolet-tracker-blanco-2022-299"],
+    ["/catalogo/detalle/hyundai-tucson-gl-20-2014-ghtd24", "/catalogo/detalle/hyundai-tucson-gl-20-blanco-2014-231"],
+    ["/catalogo/detalle/chevrolet-spark-gt-lt-12-2016-hlxb59", "/catalogo/detalle/chevrolet-spark-gt-lt-12-verde-cocktail-2016-300"],
+    ["/catalogo/detalle/ford-edge-20-aut-2017-jrth26", "/catalogo/detalle/ford-edge-20-aut-negro-2017-179"],
+    ["/catalogo/detalle/ford-edge-2017-jrth26", "/catalogo/detalle/ford-edge-20-aut-negro-2017-179"],
+    ["/catalogo/detalle/jac-t6-2020-lwrs59", "/catalogo/detalle/jac-t6-plateado-plata-2020-280"],
+    ["/catalogo/detalle/mg-zs-2024-trbx87", "/catalogo/detalle/mg-zs-gris-plata-2024-323"],
+    ["/catalogo/detalle/mitsubishi-l200-katana-crt-4x4-2019", "/catalogo/detalle/mitsubishi-l200-katana-crt-4x4-rojo-2019-n590ed1"],
+    ["/catalogo/detalle/nissan-navara-4x2-2023", "/catalogo/detalle/nissan-navara-4x2-gris-2023-n57e0ab"],
+    ["/catalogo/detalle/suzuki-jimny-mt-4x4-15-2023", "/catalogo/detalle/suzuki-jimny-mt-4x4-15-gris-2023-18"],
+    ["/catalogo/detalle/kia-morning-2015", "/catalogo/detalle/kia-morning-plateado-2015-14"],
   ] as const;
 
   for (const [path, canonical] of stays) {
@@ -178,11 +126,32 @@ test("Tucson, Spark y Tracker se quedan en Salgado", async ({ request }) => {
     expect(page.body, canonical).not.toContain("noindex");
     expect(page.body, canonical).toContain("<h1");
     expect(page.body, canonical).not.toMatch(PLATE);
+    expect(page.body, canonical).toMatch(new RegExp(`rel="canonical" href="[^"]*${canonical}"`));
+    expect(page.body, canonical).not.toMatch(/rgmotorschile\.cl|unidadeschile\.cl/);
   }
 
   const sitemap = await html(request, "/sitemap.xml");
-  expect(sitemap.body).toContain("/catalogo/detalle/chevrolet-tracker-blanco-2022-299");
+  for (const [, canonical] of stays) {
+    expect(sitemap.body, canonical).toContain(canonical);
+  }
   expect(sitemap.body).not.toContain("ford-ranger-4x4");
+});
+
+test("el Ranger SHYL53 sale a RG Motors", async ({ request }) => {
+  for (const path of [
+    "/catalogo/detalle/ford-ranger-4x4-2023",
+    "/catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a",
+    "/catalogo/detalle/ford-ranger-4x4-2023-shyl53",
+  ]) {
+    const response = await request.get(path, {
+      maxRedirects: 0,
+      headers: { "user-agent": GOOGLEBOT },
+    });
+    expect(response.status(), path).toBe(301);
+    expect(response.headers().location, path).toBe(
+      "https://www.rgmotorschile.cl/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
+    );
+  }
 });
 
 test("un slug inexistente responde 404", async ({ request }) => {

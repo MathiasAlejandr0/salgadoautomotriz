@@ -1,64 +1,20 @@
-import { modelYearSlug, type StockUnit } from "@/lib/vehicle-public";
-import { stripTrailingPlate } from "@/lib/plates";
-import { awaitingBranchConfirmation } from "@/lib/publication-holds";
 import { rgConfirmedPageFor } from "@/lib/rg-pages";
-import { unidadesPageFor } from "@/lib/unidades-pages";
+import type { StockUnit } from "@/lib/vehicle-public";
 
-const RG_SITEMAP = "https://www.rgmotorschile.cl/sitemap.xml";
-
-let rgCache: { savedAt: number; urls: string[] } | null = null;
-const TTL_MS = 60 * 60 * 1000;
-
-async function rgUrls(): Promise<string[]> {
-  if (rgCache && Date.now() - rgCache.savedAt < TTL_MS) return rgCache.urls;
-  try {
-    const response = await fetch(RG_SITEMAP, {
-      headers: { "User-Agent": "SalgadoAutomotriz/1.0" },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) return [];
-    const xml = await response.text();
-    const urls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1].trim());
-    rgCache = { savedAt: Date.now(), urls };
-    return urls;
-  } catch {
-    return rgCache?.urls ?? [];
-  }
+/**
+ * 301 entre sitios. Solo el Ranger 4x4 2023 (SHYL53), confirmado por Mathias.
+ *
+ * Un auto que está en esta planilla y también en la de RG o Unidades Chile
+ * se queda, con canónico propio. No se consulta el sitemap de otro dominio:
+ * eso movía fichas que siguen en la planilla de Salgado.
+ */
+export function sisterUrlFor(
+  unit: Pick<StockUnit, "plate" | "brand" | "model" | "year">
+): string | null {
+  return rgConfirmedPageFor(unit);
 }
 
-function matchUrl(urls: string[], plate: string, identity: string): string | null {
-  if (plate) {
-    const byPlate = urls.find((url) => url.toLowerCase().includes(plate.toLowerCase()));
-    if (byPlate) return byPlate;
-  }
-  const byModel = urls.filter((url) => {
-    const slug = decodeURIComponent(url.split("/").pop() ?? "").toLowerCase();
-    return stripTrailingPlate(slug).bare === identity;
-  });
-  return byModel.length === 1 ? byModel[0] : null;
-}
-
-export async function sisterUrlFor(unit: StockUnit): Promise<string | null> {
-  if (awaitingBranchConfirmation(unit.plate)) return null;
-  const confirmed = rgConfirmedPageFor(unit);
-  if (confirmed) return confirmed;
-  if (unit.branch === "unidades") return unidadesPageFor(unit);
-  if (unit.branch !== "rg") return null;
-  return matchUrl(await rgUrls(), unit.plate ?? "", modelYearSlug(unit.brand, unit.model, unit.year));
-}
-
-/** Auto que ya no está en esta planilla, pero sigue publicado en otra sucursal. */
-export async function sisterUrlByPlate(plate: string): Promise<string | null> {
-  if (awaitingBranchConfirmation(plate)) return null;
-  const confirmed = rgConfirmedPageFor({ plate, brand: "", model: "", year: 0 });
-  if (confirmed) return confirmed;
-  const onUnidades = unidadesPageFor({
-    plate,
-    brand: "",
-    model: "",
-    year: 0,
-    price: 0,
-  });
-  if (onUnidades) return onUnidades;
-  return matchUrl(await rgUrls(), plate, "");
+/** Patente que ya no está en esta planilla. Hoy solo SHYL53 tiene destino. */
+export function sisterUrlByPlate(plate: string): string | null {
+  return rgConfirmedPageFor({ plate, brand: "", model: "", year: 0 });
 }

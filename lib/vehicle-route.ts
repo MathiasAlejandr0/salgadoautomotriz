@@ -1,6 +1,5 @@
 import { loadStockRecords } from "@/lib/inventory/catalog";
 import { normalizePlate, stripTrailingPlate } from "@/lib/plates";
-import { awaitingBranchConfirmation } from "@/lib/publication-holds";
 import { sisterUrlByPlate, sisterUrlFor } from "@/lib/sister-sites";
 import { modelYearSlug, onSalgadoSite, type StockUnit } from "@/lib/vehicle-public";
 
@@ -32,7 +31,7 @@ export async function decideVehicleRoute(rawSlug: string): Promise<VehicleDecisi
   const units = await loadStockRecords();
   const exact = units.find((unit) => unit.slug === slug || unit.legacySlugs.includes(slug));
   if (exact) {
-    const sister = onSalgadoSite(exact) ? null : await sisterUrlFor(exact);
+    const sister = onSalgadoSite(exact) ? null : sisterUrlFor(exact);
     return decide(exact, requested, sister);
   }
 
@@ -40,19 +39,18 @@ export async function decideVehicleRoute(rawSlug: string): Promise<VehicleDecisi
   if (plate && bare && bare !== slug) {
     const matches = units.filter((unit) => modelYearSlug(unit.brand, unit.model, unit.year) === bare);
     if (matches.length === 1) {
-      const sister = onSalgadoSite(matches[0]) ? null : await sisterUrlFor(matches[0]);
+      const sister = onSalgadoSite(matches[0]) ? null : sisterUrlFor(matches[0]);
       return decide(matches[0], slug, sister);
     }
   }
 
-  if (plate && awaitingBranchConfirmation(plate)) {
-    const held = units.filter((unit) => normalizePlate(unit.plate ?? "") === normalizePlate(plate));
-    if (held.length === 1) return decide(held[0], requested, null);
-    return { action: "missing" };
-  }
-
   if (plate) {
-    const sister = await sisterUrlByPlate(plate);
+    const byPlate = units.filter((unit) => normalizePlate(unit.plate ?? "") === normalizePlate(plate));
+    if (byPlate.length === 1) {
+      const sister = onSalgadoSite(byPlate[0]) ? null : sisterUrlFor(byPlate[0]);
+      return decide(byPlate[0], requested, sister);
+    }
+    const sister = sisterUrlByPlate(plate);
     if (sister) return { action: "redirect", location: sister };
   }
 

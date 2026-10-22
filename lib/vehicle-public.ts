@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import type { VehicleWithImages } from "@/types/database";
 import type { Branch } from "@/lib/branch";
-import { branchOf, publishedOnSalgado } from "@/lib/branch";
-import { awaitingBranchConfirmation } from "@/lib/publication-holds";
+import { branchOf } from "@/lib/branch";
 import { isPlateToken, stripPlateMentions, stripTrailingPlate } from "@/lib/plates";
+import { rgConfirmedPageFor } from "@/lib/rg-pages";
 import { formatCLP, slugify } from "@/lib/utils";
 
 export type StockUnit = VehicleWithImages & {
@@ -131,9 +131,15 @@ export function forPublic(unit: StockUnit): VehicleWithImages {
   };
 }
 
-export function onSalgadoSite(unit: Pick<StockUnit, "branch" | "plate">): boolean {
-  if (awaitingBranchConfirmation(unit.plate)) return true;
-  return publishedOnSalgado(unit.branch);
+/**
+ * La fila sigue en la planilla de Salgado, así que se publica aquí
+ * aunque también figure en RG o en Unidades Chile. Canónico propio.
+ * El Ranger SHYL53 es la excepción confirmada: sale a RG.
+ */
+export function onSalgadoSite(
+  unit: Pick<StockUnit, "plate" | "brand" | "model" | "year">
+): boolean {
+  return rgConfirmedPageFor(unit) == null;
 }
 
 export function headingsAreUnique(units: StockUnit[]): Map<string, string> {
