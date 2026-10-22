@@ -192,6 +192,78 @@ function slugify(string $s): string
     return $s;
 }
 
+function is_plate_token(string $value): bool
+{
+    return (bool) preg_match('/^(?:[a-z]{4}\d{2}|[a-z]{2}\d{4})$/i', trim($value));
+}
+
+function numeric_stock(array $v): string
+{
+    $stock = preg_replace('/\D/', '', (string) ($v['stock_id'] ?? '')) ?? '';
+    $plate = (string) ($v['plate'] ?? '');
+    if ($stock === '' || ($plate !== '' && strtoupper($stock) === strtoupper($plate))) {
+        return '';
+    }
+    return $stock;
+}
+
+/**
+ * Slug público: marca-modelo-versión-año-id. La patente no entra.
+ * Misma cuenta que lib/vehicle-public.ts, para que el HTML y la API coincidan.
+ *
+ * @param array<int, array> $vehicles
+ * @return array<int, array{row: array, slug: string, legacy: array<int, string>}>
+ */
+function public_identity(array $vehicles): array
+{
+    $counts = [];
+    foreach ($vehicles as $v) {
+        $stock = numeric_stock($v);
+        if ($stock === '') {
+            continue;
+        }
+        $counts[$stock] = ($counts[$stock] ?? 0) + 1;
+    }
+    $used = [];
+    $out = [];
+    foreach ($vehicles as $v) {
+        $legacy = [];
+        $db = strtolower(trim((string) ($v['slug'] ?? '')));
+        if ($db !== '') {
+            $legacy[$db] = true;
+        }
+        $plate = trim((string) ($v['plate'] ?? ''));
+        if ($plate !== '' && is_plate_token($plate)) {
+            $legacy[slugify($v['brand'] . ' ' . $v['model'] . ' ' . $v['year'] . ' ' . $plate)] = true;
+        }
+        $slug = $db;
+        $needs = str_starts_with((string) ($v['id'] ?? ''), 'sa-')
+            || ($plate !== '' && is_plate_token($plate));
+        if ($needs) {
+            $stock = numeric_stock($v);
+            $color = (string) ($v['color'] ?? '');
+            $hash = substr(hash('sha256', $v['brand'] . '|' . $v['model'] . '|' . $v['year'] . '|' . $color . '|' . $stock . '|' . (int) $v['price']), 0, 6);
+            $short = ($stock !== '' && ($counts[$stock] ?? 0) === 1 && !is_plate_token($stock)) ? $stock : 'n' . $hash;
+            $version = (string) (($v['version'] ?? '') !== '' && $v['version'] !== null ? $v['version'] : $color);
+            $slug = slugify(trim($v['brand'] . ' ' . $v['model'] . ' ' . $version . ' ' . $v['year'] . ' ' . $short));
+            if (isset($used[$slug])) {
+                $slug .= '-' . $short;
+            }
+        }
+        $used[$slug] = true;
+        unset($legacy[$slug]);
+        $out[] = ['row' => $v, 'slug' => $slug, 'legacy' => array_keys($legacy)];
+    }
+    return $out;
+}
+
+function public_blurb(array $v): string
+{
+    $name = trim($v['brand'] . ' ' . $v['model'] . ' ' . $v['year']);
+    $price = number_format((int) $v['price'], 0, ',', '.');
+    return $name . ' por $' . $price . ' en Salgado Automotriz. Escríbenos por WhatsApp y agenda tu visita en Cardonal 15, Puerto Montt.';
+}
+
 function esc(string $s): string
 {
     return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');

@@ -13,30 +13,158 @@ function public_image_path(string $p): string
 
 // ── Público ───────────────────────────────────────────────
 
-/** El sitio público nunca expone el kilometraje (se mantiene en BD y admin). */
-function public_vehicle(array $v): array
+/** El sitio público nunca expone el kilometraje ni la patente. El slug es el canónico. */
+function public_vehicle(array $v, ?string $slug = null): array
 {
     unset($v['mileage']);
+    $v['plate'] = null;
+    if ($slug !== null) {
+        $v['slug'] = $slug;
+    }
+    $desc = (string) ($v['description'] ?? '');
+    if ($desc === '' || preg_match('/patente/i', $desc)) {
+        $v['description'] = public_blurb($v);
+    }
     return $v;
+}
+
+function published_identity(): array
+{
+    $list = load_vehicles('v.published = 1', [], "CASE WHEN v.source = 'sheet' THEN v.sort_rank ELSE -1 END ASC, v.created_at DESC");
+    return public_identity($list);
 }
 
 function h_public_vehicles(): void
 {
     header('Cache-Control: public, max-age=60');
-    $list = load_vehicles('v.published = 1', [], "CASE WHEN v.source = 'sheet' THEN v.sort_rank ELSE -1 END ASC, v.created_at DESC");
+    $vehicles = [];
+    foreach (published_identity() as $item) {
+        $vehicles[] = public_vehicle($item['row'], $item['slug']);
+    }
     http_response_code(200);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['vehicles' => array_map('public_vehicle', $list)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(['vehicles' => $vehicles], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
 function h_public_vehicle(string $slug): void
 {
-    $list = load_vehicles('v.published = 1 AND v.slug = ?', [$slug]);
-    if (!$list) {
-        json_out(['error' => 'No encontrado'], 404);
+    $slug = strtolower($slug);
+    foreach (published_identity() as $item) {
+        if ($item['slug'] === $slug || in_array($slug, $item['legacy'], true)) {
+            json_out(['vehicle' => public_vehicle($item['row'], $item['slug'])]);
+        }
     }
-    json_out(['vehicle' => public_vehicle($list[0])]);
+    json_out(['error' => 'No encontrado'], 404);
+}
+
+function static_vehicle_index(): array
+{
+    $file = dirname(__DIR__, 2) . '/vehicle-index.json';
+    if (!is_file($file)) {
+        return [];
+    }
+    $data = json_decode((string) file_get_contents($file), true);
+    return is_array($data) ? $data : [];
+}
+
+function index_match_key(string $brand, string $model, int $year, int $price): string
+{
+    return slugify($brand) . '|' . slugify($model) . '|' . $year . '|' . $price;
+}
+
+function redirect_local(string $slug): void
+{
+    header('Location: /catalogo/detalle/' . $slug, true, 301);
+    header('X-Robots-Tag: noindex');
+    header('Cache-Control: no-cache');
+    exit;
+}
+
+function h_vehicle_document(string $slug): void
+{
+    $slug = strtolower($slug);
+    $index = static_vehicle_index();
+    foreach ($index as $item) {
+        if (!is_array($item) || !isset($item['slug'])) {
+            continue;
+        }
+        $public = strtolower((string) $item['slug']);
+        $legacy = array_map('strtolower', is_array($item['legacy'] ?? null) ? $item['legacy'] : []);
+        if ($public === $slug) {
+            $file = dirname(__DIR__, 2) . '/catalogo/detalle/_.html';
+            if (!is_file($file)) {
+                html_status(404, 'Página no encontrada', 'Esta dirección no corresponde a un vehículo de Salgado.');
+            }
+            http_response_code(200);
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-cache');
+            readfile($file);
+            exit;
+        }
+        if (in_array($slug, $legacy, true) && $public !== '') {
+            redirect_local($public);
+        }
+    }
+    foreach (published_identity() as $item) {
+        $known = $item['slug'] === $slug || in_array($slug, $item['legacy'], true);
+        if (!$known) {
+            continue;
+        }
+        $row = $item['row'];
+        $key = index_match_key((string) $row['brand'], (string) $row['model'], (int) $row['year'], (int) $row['price']);
+        $hits = [];
+        foreach ($index as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $entryKey = index_match_key((string) ($entry['brand'] ?? ''), (string) ($entry['model'] ?? ''), (int) ($entry['year'] ?? 0), (int) ($entry['price'] ?? 0));
+            if ($entryKey === $key) {
+                $hits[] = strtolower((string) $entry['slug']);
+            }
+        }
+        $hits = array_values(array_unique(array_filter($hits)));
+        if (count($hits) === 1 && $hits[0] !== $slug) {
+            redirect_local($hits[0]);
+        }
+        if ($item['slug'] === $slug) {
+            $file = dirname(__DIR__, 2) . '/catalogo/detalle/_.html';
+            if (is_file($file)) {
+                http_response_code(200);
+                header('Content-Type: text/html; charset=utf-8');
+                header('Cache-Control: no-cache');
+                readfile($file);
+                exit;
+            }
+        }
+        if ($item['slug'] !== $slug) {
+            redirect_local($item['slug']);
+        }
+    }
+    $archived = load_vehicles('v.published = 0');
+    foreach ($archived as $v) {
+        $candidates = [strtolower(trim((string) $v['slug']))];
+        $plate = trim((string) ($v['plate'] ?? ''));
+        if ($plate !== '' && is_plate_token($plate)) {
+            $candidates[] = slugify($v['brand'] . ' ' . $v['model'] . ' ' . $v['year'] . ' ' . $plate);
+        }
+        if (in_array($slug, $candidates, true)) {
+            html_status(410, 'Vehículo retirado', 'Este vehículo ya no está publicado. La unidad salió de la planilla de Salgado.');
+        }
+    }
+    html_status(404, 'Página no encontrada', 'Esta dirección no corresponde a un vehículo de Salgado.');
+}
+
+function html_status(int $status, string $title, string $message): void
+{
+    http_response_code($status);
+    header('Content-Type: text/html; charset=utf-8');
+    header('X-Robots-Tag: noindex');
+    header('Cache-Control: no-cache');
+    echo '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>'
+        . esc($title) . '</title><meta name="robots" content="noindex"></head><body><h1>'
+        . esc($title) . '</h1><p>' . esc($message) . '</p></body></html>';
+    exit;
 }
 
 function h_public_reviews(): void
@@ -752,10 +880,9 @@ function h_sitemap(): void
     foreach ($static as $path => $prio) {
         $xml .= '<url><loc>' . esc($base . $path) . "</loc><lastmod>{$now}</lastmod><changefreq>daily</changefreq><priority>{$prio}</priority></url>\n";
     }
-    $rows = db()->query('SELECT slug, updated_at FROM vehicles WHERE published = 1 ORDER BY updated_at DESC')->fetchAll();
-    foreach ($rows as $r) {
-        $mod = substr((string) $r['updated_at'], 0, 10);
-        $xml .= '<url><loc>' . esc($base . '/catalogo/detalle/' . $r['slug']) . "</loc><lastmod>{$mod}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+    foreach (published_identity() as $item) {
+        $mod = substr((string) $item['row']['updated_at'], 0, 10);
+        $xml .= '<url><loc>' . esc($base . '/catalogo/detalle/' . $item['slug']) . "</loc><lastmod>{$mod}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
     }
     $xml .= "</urlset>\n";
     http_response_code(200);

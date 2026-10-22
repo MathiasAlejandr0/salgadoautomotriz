@@ -17,11 +17,18 @@ header('X-Frame-Options: DENY');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
 $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+$redirectUrl = (string) ($_SERVER['REDIRECT_URL'] ?? '');
+if ($redirectUrl !== '' && preg_match('#^/(sitemap\.xml|catalogo/detalle/|google[a-z0-9]+\.html)#', $redirectUrl)) {
+    $path = $redirectUrl;
+}
 $pos = strpos($path, '/api/');
 $route = $pos === false ? '' : trim(substr($path, $pos + 5), '/');
+$vehicleSlug = null;
 // URLs públicas que .htaccess reescribe aquí sin pasar por /api/.
 if ($path === '/sitemap.xml') {
     $route = 'sitemap.xml';
+} elseif (preg_match('#^/catalogo/detalle/([a-z0-9-]+)$#', $path, $vm)) {
+    $vehicleSlug = $vm[1];
 } elseif (preg_match('#^/(google[a-z0-9]{6,40}\.html)$#', $path, $gm)) {
     $route = 'gsc/' . $gm[1];
 }
@@ -35,8 +42,11 @@ try {
         case (bool) preg_match('#^vehicles/([a-z0-9-]{1,160})$#', $route, $m) && $method === 'GET':
             h_public_vehicle($m[1]);
             break;
-        case $route === 'sitemap.xml' && $method === 'GET':
+        case $route === 'sitemap.xml' && ($method === 'GET' || $method === 'HEAD'):
             h_sitemap();
+            break;
+        case $vehicleSlug !== null && ($method === 'GET' || $method === 'HEAD'):
+            h_vehicle_document($vehicleSlug);
             break;
         case $route === 'analytics.js' && $method === 'GET':
             h_analytics_js();

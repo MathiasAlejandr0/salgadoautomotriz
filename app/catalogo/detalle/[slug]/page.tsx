@@ -15,7 +15,7 @@ interface PageProps {
 
 export async function generateStaticParams() {
   const vehicles = await getVehicles();
-  // "_" es la plantilla que Apache sirve para autos publicados después del build.
+  // "_" es la plantilla que PHP sirve si el auto llegó después de este build.
   return [...vehicles.map((vehicle) => ({ slug: vehicle.slug })), { slug: "_" }];
 }
 

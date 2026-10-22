@@ -1,8 +1,11 @@
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { cache } from "react";
 import type { VehicleWithImages } from "@/types/database";
 import { MOCK_VEHICLES } from "@/lib/mock-data";
 import { canUseMockFallback } from "@/lib/env";
 import { applyFilters, catalogFacets, type VehicleFilters } from "@/lib/filters";
+import { annotateStock, forPublic, type StockUnit } from "@/lib/vehicle-public";
 
 export type { VehicleFilters };
 
@@ -16,12 +19,50 @@ function sinKilometraje(list: VehicleWithImages[]): VehicleWithImages[] {
   return list.map((v) => ({ ...v, mileage: null }));
 }
 
+const REDIRECT_START = "# BEGIN plate-redirects";
+const REDIRECT_END = "# END plate-redirects";
+
+/** La URL vieja con patente responde 301 en este dominio, aunque quede el HTML anterior. */
+async function writePlateRedirects(units: StockUnit[]): Promise<void> {
+  const file = path.join(process.cwd(), "hostgator", "public", ".htaccess");
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    return;
+  }
+  if (!text.includes(REDIRECT_START) || !text.includes(REDIRECT_END)) return;
+  const rules = [
+    ...new Set(
+      units.flatMap((unit) =>
+        unit.legacySlugs
+          .map((slug) => slug.trim().toLowerCase())
+          .filter((slug) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) && slug !== unit.slug)
+          .map((slug) => `  RewriteRule ^catalogo/detalle/${slug}$ /catalogo/detalle/${unit.slug} [R=301,L]`)
+      )
+    ),
+  ];
+  const block = [REDIRECT_START, ...rules, `  ${REDIRECT_END}`].join("\n");
+  const next = text.replace(new RegExp(`${REDIRECT_START}[\\s\\S]*?${REDIRECT_END}`), block);
+  if (next !== text) await writeFile(file, next);
+  const index = units.map((unit) => ({
+    slug: unit.slug,
+    legacy: unit.legacySlugs,
+    brand: unit.brand,
+    model: unit.model,
+    year: unit.year,
+    price: unit.price,
+  }));
+  await writeFile(path.join(process.cwd(), "hostgator", "public", "vehicle-index.json"), JSON.stringify(index));
+}
+
 async function loadInventoryRaw(): Promise<VehicleWithImages[]> {
   const { loadSalgadoCatalog } = await import("@/lib/inventory/catalog");
   const sheet = await loadSalgadoCatalog();
-  if (sheet.length) return sheet;
-  if (!canUseMockFallback()) return [];
-  return MOCK_VEHICLES;
+  const source = sheet.length ? sheet : canUseMockFallback() ? MOCK_VEHICLES : [];
+  const units = annotateStock(source.map((vehicle) => ({ ...vehicle, mileage: null })));
+  await writePlateRedirects(units);
+  return units.map(forPublic);
 }
 
 async function loadInventory(): Promise<VehicleWithImages[]> {
