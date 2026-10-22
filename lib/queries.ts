@@ -83,9 +83,10 @@ export async function getFeaturedVehicles(limit = 6): Promise<VehicleWithImages[
 }
 
 async function loadAllUnits(): Promise<StockUnit[]> {
-  if (!isSupabaseConfigured()) {
-    return loadInventory();
-  }
+  // La planilla es la publicación. Postgres solo cubre si la planilla no respondió.
+  const sheet = await loadInventory();
+  if (sheet.length) return sheet;
+  if (!isSupabaseConfigured()) return [];
 
   const supabase = createPublicClient();
   const data = await fromSupabase("vehicles", async () =>

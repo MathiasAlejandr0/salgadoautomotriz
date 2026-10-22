@@ -6,10 +6,9 @@ export type Branch = "salgado" | "rg" | "unidades" | "pendiente";
  * se nombran aparte en la misma columna. Vacío queda pendiente:
  * no se adivina la sucursal.
  *
- * Esta etiqueta no saca el auto del sitio. Si la fila sigue en la
- * planilla de Salgado, la ficha se publica aquí aunque también
- * esté en otra planilla. La única salida confirmada es el Ranger
- * SHYL53, en lib/rg-pages.ts.
+ * Esta etiqueta no saca el auto del sitio. Toda fila de la planilla
+ * se publica aquí, con canónico propio. No hay 301 hacia otro sitio.
+ * Si la fila desaparece, la URL queda en 410 en este dominio.
  */
 export function branchOf(location: string | null | undefined): Branch {
   const value = (location ?? "")

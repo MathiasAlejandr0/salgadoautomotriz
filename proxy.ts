@@ -5,19 +5,11 @@ import { applySecurityHeaders } from "@/lib/security-headers";
 import { decideVehicleRoute } from "@/lib/vehicle-route";
 
 function gonePage(): string {
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Vehículo retirado</title></head><body style="font-family:sans-serif;background:#050a14;color:#e8eef6;padding:3rem"><h1>Este vehículo ya no está publicado</h1><p>La unidad no está en Salgado Automotriz. Revisa el <a href="/catalogo">catálogo</a>.</p></body></html>`;
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Vehículo retirado</title></head><body style="font-family:sans-serif;background:#050a14;color:#e8eef6;padding:3rem"><h1>Este vehículo ya no está publicado</h1><p>La unidad salió de la planilla de Salgado. Revisa el <a href="/catalogo">catálogo</a>.</p></body></html>`;
 }
 
 async function vehicleProxy(request: NextRequest, slug: string): Promise<NextResponse | null> {
   const decision = await decideVehicleRoute(slug);
-  if (decision.action === "redirect") {
-    const target = decision.location.startsWith("http")
-      ? decision.location
-      : new URL(decision.location, request.url);
-    const response = NextResponse.redirect(target, 301);
-    applySecurityHeaders(response.headers);
-    return response;
-  }
   if (decision.action === "gone") {
     const response = new NextResponse(gonePage(), {
       status: 410,
@@ -26,7 +18,13 @@ async function vehicleProxy(request: NextRequest, slug: string): Promise<NextRes
     applySecurityHeaders(response.headers);
     return response;
   }
-  return null;
+  if (decision.action !== "redirect") return null;
+  if (!decision.location.startsWith("/")) return null;
+  const target = new URL(decision.location, request.url);
+  if (target.origin !== request.nextUrl.origin) return null;
+  const response = NextResponse.redirect(target, 301);
+  applySecurityHeaders(response.headers);
+  return response;
 }
 
 function isAdminUser(user: { app_metadata?: Record<string, unknown> } | null): boolean {

@@ -3,7 +3,6 @@ import type { VehicleWithImages } from "@/types/database";
 import type { Branch } from "@/lib/branch";
 import { branchOf } from "@/lib/branch";
 import { isPlateToken, stripPlateMentions, stripTrailingPlate } from "@/lib/plates";
-import { rgConfirmedPageFor } from "@/lib/rg-pages";
 import { formatCLP, slugify } from "@/lib/utils";
 
 export type StockUnit = VehicleWithImages & {
@@ -131,15 +130,11 @@ export function forPublic(unit: StockUnit): VehicleWithImages {
   };
 }
 
-/**
- * La fila sigue en la planilla de Salgado, así que se publica aquí
- * aunque también figure en RG o en Unidades Chile. Canónico propio.
- * El Ranger SHYL53 es la excepción confirmada: sale a RG.
- */
+/** Toda fila de esta planilla se publica aquí. Ningún auto sale a otro sitio. */
 export function onSalgadoSite(
-  unit: Pick<StockUnit, "plate" | "brand" | "model" | "year">
+  _unit: Pick<StockUnit, "plate" | "brand" | "model" | "year">
 ): boolean {
-  return rgConfirmedPageFor(unit) == null;
+  return true;
 }
 
 export function headingsAreUnique(units: StockUnit[]): Map<string, string> {

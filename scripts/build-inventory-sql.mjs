@@ -80,6 +80,21 @@ on conflict (slug) do update set
   featured = excluded.featured,
   updated_at = now();
 
+-- Autos que ya no están en la planilla: borrar fotos del bucket y la fila.
+delete from storage.objects
+where bucket_id = 'vehicle-photos'
+  and name in (
+    select vi.storage_path
+    from public.vehicle_images vi
+    join public.vehicles v on v.id = vi.vehicle_id
+    where v.slug not in (${slugs})
+      and vi.storage_path not like 'http%'
+      and left(vi.storage_path, 1) <> '/'
+  );
+
+delete from public.vehicles
+where slug not in (${slugs});
+
 delete from public.vehicle_images
 where vehicle_id in (select id from public.vehicles where slug in (${slugs}));
 

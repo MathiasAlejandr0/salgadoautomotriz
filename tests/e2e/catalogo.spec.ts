@@ -134,13 +134,13 @@ test("un auto que sigue en la planilla se publica aquí", async ({ request }) =>
   for (const [, canonical] of stays) {
     expect(sitemap.body, canonical).toContain(canonical);
   }
-  expect(sitemap.body).not.toContain("ford-ranger-4x4");
+  expect(sitemap.body).toContain("/catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a");
 });
 
-test("el Ranger SHYL53 sale a RG Motors", async ({ request }) => {
+test("el Ranger SHYL53 se queda en Salgado", async ({ request }) => {
+  const canonical = "/catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a";
   for (const path of [
     "/catalogo/detalle/ford-ranger-4x4-2023",
-    "/catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a",
     "/catalogo/detalle/ford-ranger-4x4-2023-shyl53",
   ]) {
     const response = await request.get(path, {
@@ -148,10 +148,17 @@ test("el Ranger SHYL53 sale a RG Motors", async ({ request }) => {
       headers: { "user-agent": GOOGLEBOT },
     });
     expect(response.status(), path).toBe(301);
-    expect(response.headers().location, path).toBe(
-      "https://www.rgmotorschile.cl/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
-    );
+    const location = response.headers().location ?? "";
+    expect(location, path).toContain(canonical);
+    expect(location, path).not.toMatch(/^https?:\/\/(?!127\.0\.0\.1|localhost)/);
+    expect(location, path).not.toMatch(/rgmotorschile|unidadeschile/);
   }
+
+  const page = await html(request, canonical);
+  expect(page.response.status()).toBe(200);
+  expect(page.body).toContain("<h1");
+  expect(page.body).not.toContain("noindex");
+  expect(page.body).toMatch(new RegExp(`rel="canonical" href="[^"]*${canonical}"`));
 });
 
 test("un slug inexistente responde 404", async ({ request }) => {
