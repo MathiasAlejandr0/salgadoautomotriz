@@ -2,19 +2,15 @@ import { normalizePlate } from "@/lib/plates";
 import { slugify } from "@/lib/utils";
 
 /**
- * Fichas reales de https://www.unidadeschile.cl/catalogo.
+ * Fichas de https://www.unidadeschile.cl/catalogo.
  *
- * El sitemap de ese sitio no lista autos y el <link rel="canonical">
- * del HTML apunta al inicio. La ficha igual existe: la ruta es
- * /catalogo/:id y el id es el slug publicado.
- *
- * Hoy ese slug es marca-modelo-año-patente. El cambio en curso de
- * Unidades Chile (agente bc-24cd35e6) lo va a dejar en
- * marca-modelo-versión-año más un id corto, sin patente. Ese slug
- * todavía no está en el repositorio ni responde en el sitio: una URL
- * armada así muestra "Unidad no encontrada". Por eso cada destino de
- * abajo es la ficha que el catálogo enlaza hoy. Cuando publiquen el
- * id nuevo, se cambia solo el campo `url`.
+ * Los destinos son el slug sin patente de
+ * https://github.com/RgMotorsChile/UnidadesChile/pull/11
+ * (`shared/vehiclePublic.mjs`, `publicSlug`). El id corto sale del
+ * slug viejo (marca-modelo-año-patente) y no es la patente. La versión
+ * de estos tres autos repite el modelo, así que no agrega otro tramo.
+ * El 301 apunta directo a esa URL: Unidades Chile redirige la URL vieja
+ * a la misma ficha, y un salto intermedio sería un doble redirect.
  */
 export type UnidadesPage = {
   url: string;
@@ -27,7 +23,7 @@ export type UnidadesPage = {
 
 export const UNIDADES_PAGES: UnidadesPage[] = [
   {
-    url: "https://www.unidadeschile.cl/catalogo/mitsubishi-l200-katana-crt-4x4-2019-lpcg80",
+    url: "https://www.unidadeschile.cl/catalogo/mitsubishi-l200-katana-crt-4x4-2019-pq8ymm",
     plate: "LPCG80",
     brand: "Mitsubishi",
     model: "L200 KATANA CRT 4X4",
@@ -35,7 +31,7 @@ export const UNIDADES_PAGES: UnidadesPage[] = [
     price: 11_990_000,
   },
   {
-    url: "https://www.unidadeschile.cl/catalogo/nissan-navara-4x2-2023-sjtd29",
+    url: "https://www.unidadeschile.cl/catalogo/nissan-navara-4x2-2023-972gf4",
     plate: "SJTD29",
     brand: "Nissan",
     model: "NAVARA 4X2",
@@ -43,7 +39,7 @@ export const UNIDADES_PAGES: UnidadesPage[] = [
     price: 15_990_000,
   },
   {
-    url: "https://www.unidadeschile.cl/catalogo/suzuki-jimny-mt-4x4-1-5-2023-sxkk11",
+    url: "https://www.unidadeschile.cl/catalogo/suzuki-jimny-mt-4x4-1-5-2023-m6wn76",
     plate: "SXKK11",
     brand: "Suzuki",
     model: "JIMNY MT 4X4 1.5",

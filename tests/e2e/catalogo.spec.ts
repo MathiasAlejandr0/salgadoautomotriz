@@ -100,15 +100,15 @@ test("autos de Unidades Chile van a su ficha real", async ({ request }) => {
   const published = [
     [
       "/catalogo/detalle/mitsubishi-l200-katana-crt-4x4-2019",
-      "https://www.unidadeschile.cl/catalogo/mitsubishi-l200-katana-crt-4x4-2019-lpcg80",
+      "https://www.unidadeschile.cl/catalogo/mitsubishi-l200-katana-crt-4x4-2019-pq8ymm",
     ],
     [
       "/catalogo/detalle/nissan-navara-4x2-2023",
-      "https://www.unidadeschile.cl/catalogo/nissan-navara-4x2-2023-sjtd29",
+      "https://www.unidadeschile.cl/catalogo/nissan-navara-4x2-2023-972gf4",
     ],
     [
       "/catalogo/detalle/suzuki-jimny-mt-4x4-15-2023",
-      "https://www.unidadeschile.cl/catalogo/suzuki-jimny-mt-4x4-1-5-2023-sxkk11",
+      "https://www.unidadeschile.cl/catalogo/suzuki-jimny-mt-4x4-1-5-2023-m6wn76",
     ],
   ] as const;
 
