@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { formatCLP, cn } from "@/lib/utils";
+import { formatCLP } from "@/lib/utils";
+import { vehicleAlt } from "@/lib/vehicle-public";
 import type { VehicleWithImages } from "@/types/database";
 import { resolveVehicleImage } from "@/lib/images";
 import { calcCuota, pieMinimo } from "@/lib/financing";
@@ -8,10 +9,9 @@ import { Fuel, Gauge, Calendar, Settings2 } from "lucide-react";
 
 interface VehicleCardProps {
   vehicle: VehicleWithImages;
-  glow?: boolean;
 }
 
-export default function VehicleCard({ vehicle, glow = false }: VehicleCardProps) {
+export default function VehicleCard({ vehicle }: VehicleCardProps) {
   const imgSrc = resolveVehicleImage(vehicle);
   const pieMin = pieMinimo(vehicle.price);
   const cuota = Math.round(calcCuota(vehicle.price - pieMin, 48));
@@ -19,20 +19,17 @@ export default function VehicleCard({ vehicle, glow = false }: VehicleCardProps)
   return (
     <Link
       href={`/catalogo/detalle/${vehicle.slug}`}
-      className={cn(
-        "group block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c1828] transition-all duration-300 hover:-translate-y-1 hover:border-brand-accent/50",
-        glow && "border-brand-accent/60 shadow-[0_0_32px_rgba(0,188,254,0.2)]"
-      )}
+      className="group block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c1828] transition-all duration-300 hover:-translate-y-1 hover:border-white/20"
     >
       <div className="relative aspect-[16/10] overflow-hidden">
         <Image
           src={imgSrc}
-          alt={`${vehicle.brand} ${vehicle.model}`}
+          alt={vehicleAlt(vehicle)}
           fill
           className="object-cover transition-transform duration-700 group-hover:scale-[1.04]"
           sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
         />
-        <span className="absolute left-3 top-3 rounded-md bg-brand-accent px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#041018]">
+        <span className="absolute left-3 top-3 rounded border border-white/25 bg-[#0b1524]/85 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/80">
           Pie mínimo
         </span>
       </div>

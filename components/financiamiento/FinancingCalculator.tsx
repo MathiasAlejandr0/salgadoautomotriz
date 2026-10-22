@@ -70,16 +70,18 @@ export default function FinancingCalculator({ vehicles }: Props) {
 
       <div className="mb-7">
         <div className="mb-3 flex justify-between">
-          <label className="text-xs font-medium text-brand-muted">2. Pie / enganche</label>
+          <label htmlFor="pie-financiamiento" className="text-xs font-medium text-brand-muted">2. Pie / enganche</label>
           <span className="text-sm font-bold text-brand-accent">{formatCLP(pie)}</span>
         </div>
         <input
+          id="pie-financiamiento"
           type="range"
           min={10}
           max={50}
           step={5}
           value={piePct}
           onChange={(e) => setPiePct(Number(e.target.value))}
+          aria-valuetext={`${piePct} por ciento`}
           className="range-premium"
           style={{ ["--pct" as string]: `${((piePct - 10) / 40) * 100}%` }}
         />
@@ -92,16 +94,18 @@ export default function FinancingCalculator({ vehicles }: Props) {
 
       <div className="mb-8">
         <div className="mb-3 flex justify-between">
-          <label className="text-xs font-medium text-brand-muted">3. Plazo</label>
+          <label htmlFor="plazo-financiamiento" className="text-xs font-medium text-brand-muted">3. Plazo</label>
           <span className="text-sm font-bold text-brand-accent">{plazo} meses</span>
         </div>
         <input
+          id="plazo-financiamiento"
           type="range"
           min={12}
           max={72}
           step={12}
           value={plazo}
           onChange={(e) => setPlazo(Number(e.target.value))}
+          aria-valuetext={`${plazo} meses`}
           className="range-premium"
           style={{ ["--pct" as string]: `${((plazo - 12) / 60) * 100}%` }}
         />

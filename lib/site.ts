@@ -7,6 +7,8 @@
  *   NEXT_PUBLIC_PHONE_DISPLAY="+56 9 XXXX XXXX"
  * Sin esas variables el sitio usa un placeholder (+56 9 1234 5678) que no
  * es el número de Salgado. No inventar el número aquí.
+ * Cada sucursal conserva su propio WhatsApp. No unificar con RG Motors
+ * ni con Unidades Chile.
  *
  * La nota de Google solo se publica si el dueño confirma el dato:
  *   NEXT_PUBLIC_GOOGLE_RATING=4.9

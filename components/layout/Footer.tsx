@@ -9,10 +9,9 @@ function SocialIcon({ label, href }: { label: string; href: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="p-2 rounded-lg bg-[#071422] hover:bg-[#1a3a5c] text-[#94A3B8] hover:text-[#00BCFE] transition-colors text-xs font-bold"
-      aria-label={label}
+      className="rounded-lg bg-[#071422] px-2.5 py-2 text-xs font-bold text-[#94A3B8] transition-colors hover:bg-[#1a3a5c] hover:text-[#00BCFE]"
     >
-      {label === "Instagram" ? "IG" : "FB"}
+      {label}
     </a>
   );
 }

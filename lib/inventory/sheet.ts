@@ -209,39 +209,115 @@ export function parseSalgadoRows(rows: unknown[][]): { vehicles: SheetVehicle[];
 
   const yearNow = new Date().getFullYear();
   const vehicles: SheetVehicle[] = [];
-  const seen = new Set<string>();
+  const seenPlates = new Set<string>();
+  const seenIdentity = new Set<string>();
+
+  const push = (vehicle: SheetVehicle) => {
+    const identity = `${fold(vehicle.brand)}|${fold(vehicle.model)}|${vehicle.year}|${vehicle.price}`;
+    if (vehicle.plate && seenPlates.has(vehicle.plate)) return;
+    if (seenIdentity.has(identity)) return;
+    if (vehicle.plate) seenPlates.add(vehicle.plate);
+    seenIdentity.add(identity);
+    vehicles.push(vehicle);
+  };
 
   for (const row of rows.slice(headerIndex + 1)) {
     if (!row || row.every((c) => c == null || String(c).trim() === "")) continue;
-    const plate = cleanPlate(cell(row, iPlate));
-    const brand = cleanBrand(cell(row, iBrand));
-    const model = String(cell(row, iModel) ?? "").trim();
-    const year = parseInt(String(cell(row, iYear) ?? ""), 10) || 0;
-    const price = parseClp(cell(row, iPrice));
-    if (!plate || !brand || !model || year < 1990 || year > yearNow + 1 || price <= 0) continue;
-    if (seen.has(plate)) continue;
-    seen.add(plate);
-
-    const power = inferPowertrain(model);
-    const stockRaw = String(cell(row, iId) ?? "").replace(/[^\d]/g, "");
-    vehicles.push({
-      stockId: stockRaw || plate,
-      plate,
-      brand,
-      model: model.toUpperCase(),
-      color: titleCase(String(cell(row, iColor) ?? "").trim()),
-      year,
-      price,
-      mileage: parseKm(cell(row, iKm)),
-      fuel: power.fuel,
-      transmission: power.transmission,
-      category: guessCategory(model),
-      location: titleCase(String(cell(row, iLocation) ?? "").trim()) || "Patio",
-      origin: fold(cell(row, iOrigin)) || "STOCK",
+    const standard = parseStandardRow(row, {
+      iOrigin,
+      iId,
+      iPlate,
+      iBrand,
+      iModel,
+      iColor,
+      iYear,
+      iPrice,
+      iKm,
+      iLocation,
+      yearNow,
     });
+    if (standard) {
+      push(standard);
+      continue;
+    }
+    const shifted = parseShiftedStockRow(row, yearNow);
+    if (shifted) push(shifted);
   }
 
   return { vehicles, driveFolderId };
+}
+
+function parseStandardRow(
+  row: unknown[],
+  index: {
+    iOrigin: number;
+    iId: number;
+    iPlate: number;
+    iBrand: number;
+    iModel: number;
+    iColor: number;
+    iYear: number;
+    iPrice: number;
+    iKm: number;
+    iLocation: number;
+    yearNow: number;
+  }
+): SheetVehicle | null {
+  const plate = cleanPlate(cell(row, index.iPlate));
+  const brand = cleanBrand(cell(row, index.iBrand));
+  const model = String(cell(row, index.iModel) ?? "").trim();
+  const year = parseInt(String(cell(row, index.iYear) ?? ""), 10) || 0;
+  const price = parseClp(cell(row, index.iPrice));
+  if (!plate || !brand || !model || year < 1990 || year > index.yearNow + 1 || price <= 0) return null;
+  const power = inferPowertrain(model);
+  const stockRaw = String(cell(row, index.iId) ?? "").replace(/[^\d]/g, "");
+  return {
+    stockId: stockRaw,
+    plate,
+    brand,
+    model: model.toUpperCase(),
+    color: titleCase(String(cell(row, index.iColor) ?? "").trim()),
+    year,
+    price,
+    mileage: parseKm(cell(row, index.iKm)),
+    fuel: power.fuel,
+    transmission: power.transmission,
+    category: guessCategory(model),
+    location: titleCase(String(cell(row, index.iLocation) ?? "").trim()),
+    origin: fold(cell(row, index.iOrigin)) || "STOCK",
+  };
+}
+
+/**
+ * Segunda tabla de la misma pestaña: no trae patente.
+ * Columnas: id, vacío, marca, modelo, color, año, vacío, precio, …, ubicación.
+ * Si no hay ubicación, queda vacía (sucursal pendiente). No se inventa patente.
+ */
+function parseShiftedStockRow(row: unknown[], yearNow: number): SheetVehicle | null {
+  if (cleanPlate(row[3])) return null;
+  const brand = cleanBrand(row[3]);
+  if (!brand || /\d/.test(brand)) return null;
+  const model = String(row[4] ?? "").trim();
+  const year = parseInt(String(row[6] ?? ""), 10) || 0;
+  const price = parseClp(row[8]);
+  if (!model || year < 1990 || year > yearNow + 1 || price <= 0) return null;
+  const power = inferPowertrain(model);
+  const stockRaw = String(row[1] ?? "").replace(/[^\d]/g, "");
+  return {
+    stockId: stockRaw,
+    plate: "",
+    brand,
+    model: model.toUpperCase(),
+    color: titleCase(String(row[5] ?? "").trim()),
+    year,
+    price,
+    mileage: null,
+    fuel: power.fuel,
+    transmission: power.transmission,
+    category: guessCategory(model),
+    location: titleCase(String(row[13] ?? "").trim()),
+    origin: fold(row[10]) || "STOCK",
+  };
 }
 
 export async function fetchSalgadoSheet(): Promise<{ vehicles: SheetVehicle[]; driveFolderId: string | null }> {

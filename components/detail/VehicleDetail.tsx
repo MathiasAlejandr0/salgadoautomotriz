@@ -21,13 +21,15 @@ import { resolveVehicleGallery } from "@/lib/images";
 import type { VehicleWithImages } from "@/types/database";
 import { waUrl } from "@/lib/site";
 import { calcCuota, pieMinimo } from "@/lib/financing";
+import { vehicleAlt } from "@/lib/vehicle-public";
 
 interface Props {
   vehicle: VehicleWithImages;
+  heading: string;
   waMessage: string;
 }
 
-export default function VehicleDetail({ vehicle, waMessage }: Props) {
+export default function VehicleDetail({ vehicle, heading, waMessage }: Props) {
   const gallery = resolveVehicleGallery(vehicle);
   const [current, setCurrent] = useState(0);
   const [plazo, setPlazo] = useState(60);
@@ -63,9 +65,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
         <ChevronRight size={12} />
         <span className="text-[#00BCFE]">{vehicle.category}</span>
         <ChevronRight size={12} />
-        <span className="text-white truncate">
-          {vehicle.brand} {vehicle.model} {vehicle.version} {vehicle.year}
-        </span>
+        <span className="text-white truncate">{heading}</span>
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-7">
@@ -73,7 +73,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
           <div className="relative aspect-[16/10] rounded-2xl overflow-hidden neon-border bg-[#0a1a2e]">
             <Image
               src={gallery[current]}
-              alt={`${vehicle.brand} ${vehicle.model}`}
+              alt={vehicleAlt(vehicle)}
               fill
               className="object-cover"
               preload
@@ -81,13 +81,17 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
               quality={90}
             />
             <button
+              type="button"
               onClick={() => setCurrent((c) => (c === 0 ? gallery.length - 1 : c - 1))}
+              aria-label="Foto anterior"
               className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-[#050d18]/70 hover:bg-[#0a1a2e] rounded-full flex items-center justify-center text-white backdrop-blur-md border border-white/10"
             >
               <ChevronLeft size={20} />
             </button>
             <button
+              type="button"
               onClick={() => setCurrent((c) => (c === gallery.length - 1 ? 0 : c + 1))}
+              aria-label="Foto siguiente"
               className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-[#050d18]/70 hover:bg-[#0a1a2e] rounded-full flex items-center justify-center text-white backdrop-blur-md border border-white/10"
             >
               <ChevronRight size={20} />
@@ -102,9 +106,12 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
             {gallery.map((src, i) => (
               <button
                 key={i}
+                type="button"
                 onClick={() => setCurrent(i)}
+                aria-label={`Foto ${i + 1} de ${gallery.length}`}
+                aria-current={i === current ? "true" : undefined}
                 className={`relative shrink-0 w-[88px] h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                  i === current ? "border-[#00BCFE] shadow-[0_0_12px_rgba(0,188,254,0.4)]" : "border-[#16324f]"
+                  i === current ? "border-[#00BCFE]" : "border-[#16324f]"
                 }`}
               >
                 <Image src={src} alt="" fill className="object-cover" sizes="88px" />
@@ -135,9 +142,7 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
               <p className="text-[#00BCFE] text-[11px] font-bold uppercase tracking-[0.2em] mb-2">
                 Disponible en sala
               </p>
-              <h1 className="text-2xl font-black text-white leading-tight">
-                {vehicle.brand} {vehicle.model} {vehicle.version} {vehicle.year}
-              </h1>
+              <h1 className="text-2xl font-black text-white leading-tight">{heading}</h1>
               <p className="text-sm text-[#8ba0b8] mt-2 leading-relaxed">
                 {[
                   vehicle.category,
@@ -167,17 +172,22 @@ export default function VehicleDetail({ vehicle, waMessage }: Props) {
                   <span className="text-sm font-semibold text-[#8ba0b8]">/mes</span>
                 </p>
               </div>
-              <label className="text-xs text-[#8ba0b8] block mb-2">
+              <label htmlFor="plazo-ficha" className="text-xs text-[#8ba0b8] block mb-2">
                 Plazo del financiamiento:{" "}
                 <span className="text-white font-semibold">{plazo} meses</span>
               </label>
               <input
+                id="plazo-ficha"
                 type="range"
                 min={12}
                 max={72}
                 step={12}
                 value={plazo}
                 onChange={(e) => setPlazo(Number(e.target.value))}
+                aria-valuemin={12}
+                aria-valuemax={72}
+                aria-valuenow={plazo}
+                aria-valuetext={`${plazo} meses`}
                 className="range-premium"
                 style={{ ["--pct" as string]: `${((plazo - 12) / 60) * 100}%` }}
               />

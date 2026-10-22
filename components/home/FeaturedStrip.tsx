@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatCLP } from "@/lib/utils";
+import { vehicleAlt } from "@/lib/vehicle-public";
 import { resolveVehicleImage } from "@/lib/images";
 import type { VehicleWithImages } from "@/types/database";
 
@@ -32,7 +33,7 @@ export default function FeaturedStrip({ vehicles }: FeaturedStripProps) {
               <div className="relative w-[40%] min-w-[5.5rem] overflow-hidden">
                 <Image
                   src={resolveVehicleImage(v)}
-                  alt={`${v.brand} ${v.model}`}
+                  alt={vehicleAlt(v)}
                   fill
                   className="object-cover transition-transform duration-300 group-hover:scale-105"
                   sizes="(max-width: 640px) 40vw, 150px"
@@ -42,7 +43,7 @@ export default function FeaturedStrip({ vehicles }: FeaturedStripProps) {
                 <h3 className="text-[0.6875rem] font-bold uppercase leading-snug tracking-wide text-white sm:text-[0.75rem]">
                   {v.brand} {v.model}
                 </h3>
-                <p className="mt-0.5 text-[0.625rem] text-white/45">{v.year}</p>
+                <p className="mt-0.5 text-[0.625rem] text-white/75">{v.year}</p>
                 <p className="mt-1 text-[0.875rem] font-black tracking-tight text-brand-accent sm:text-[0.9375rem]">
                   {formatCLP(v.price)}
                 </p>
