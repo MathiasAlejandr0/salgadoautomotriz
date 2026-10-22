@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { VehicleWithImages } from "@/types/database";
 import type { Branch } from "@/lib/branch";
 import { branchOf, publishedOnSalgado } from "@/lib/branch";
+import { awaitingBranchConfirmation } from "@/lib/publication-holds";
 import { isPlateToken, stripPlateMentions, stripTrailingPlate } from "@/lib/plates";
 import { formatCLP, slugify } from "@/lib/utils";
 
@@ -130,7 +131,8 @@ export function forPublic(unit: StockUnit): VehicleWithImages {
   };
 }
 
-export function onSalgadoSite(unit: StockUnit): boolean {
+export function onSalgadoSite(unit: Pick<StockUnit, "branch" | "plate">): boolean {
+  if (awaitingBranchConfirmation(unit.plate)) return true;
   return publishedOnSalgado(unit.branch);
 }
 

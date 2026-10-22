@@ -1,5 +1,7 @@
 import { modelYearSlug, type StockUnit } from "@/lib/vehicle-public";
 import { stripTrailingPlate } from "@/lib/plates";
+import { awaitingBranchConfirmation } from "@/lib/publication-holds";
+import { rgConfirmedPageFor } from "@/lib/rg-pages";
 import { unidadesPageFor } from "@/lib/unidades-pages";
 
 const RG_SITEMAP = "https://www.rgmotorschile.cl/sitemap.xml";
@@ -37,6 +39,9 @@ function matchUrl(urls: string[], plate: string, identity: string): string | nul
 }
 
 export async function sisterUrlFor(unit: StockUnit): Promise<string | null> {
+  if (awaitingBranchConfirmation(unit.plate)) return null;
+  const confirmed = rgConfirmedPageFor(unit);
+  if (confirmed) return confirmed;
   if (unit.branch === "unidades") return unidadesPageFor(unit);
   if (unit.branch !== "rg") return null;
   return matchUrl(await rgUrls(), unit.plate ?? "", modelYearSlug(unit.brand, unit.model, unit.year));
@@ -44,6 +49,9 @@ export async function sisterUrlFor(unit: StockUnit): Promise<string | null> {
 
 /** Auto que ya no está en esta planilla, pero sigue publicado en otra sucursal. */
 export async function sisterUrlByPlate(plate: string): Promise<string | null> {
+  if (awaitingBranchConfirmation(plate)) return null;
+  const confirmed = rgConfirmedPageFor({ plate, brand: "", model: "", year: 0 });
+  if (confirmed) return confirmed;
   const onUnidades = unidadesPageFor({
     plate,
     brand: "",

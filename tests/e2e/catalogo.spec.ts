@@ -121,20 +121,68 @@ test("autos de Unidades Chile van a su ficha real", async ({ request }) => {
     expect(response.headers().location, path).toBe(destination);
   }
 
-  // Están marcados Uni Chile en la planilla, pero el catálogo vivo de
-  // unidadeschile.cl no los publica. La URL directa dice "Unidad no encontrada".
-  for (const path of [
-    "/catalogo/detalle/chevrolet-tracker-2022-rzkv76",
-    "/catalogo/detalle/ford-ranger-4x4-2023",
-    "/catalogo/detalle/kia-morning-2015",
-  ]) {
+  const ranger = await request.get("/catalogo/detalle/ford-ranger-4x4-2023", {
+    maxRedirects: 0,
+    headers: { "user-agent": GOOGLEBOT },
+  });
+  expect(ranger.status()).toBe(301);
+  expect(ranger.headers().location).toBe(
+    "https://www.rgmotorschile.cl/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
+  );
+  const rangerCanonical = await request.get("/catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a", {
+    maxRedirects: 0,
+    headers: { "user-agent": GOOGLEBOT },
+  });
+  expect(rangerCanonical.status()).toBe(301);
+  expect(rangerCanonical.headers().location).toBe(
+    "https://www.rgmotorschile.cl/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
+  );
+
+  // Marcado Uni Chile en la planilla, pero unidadeschile.cl no lo publica.
+  const morning = await request.get("/catalogo/detalle/kia-morning-2015", {
+    maxRedirects: 0,
+    headers: { "user-agent": GOOGLEBOT },
+  });
+  expect(morning.status()).toBe(410);
+  expect((await morning.text()).toLowerCase()).not.toContain("no encontrado");
+});
+
+test("Tucson, Spark y Tracker se quedan en Salgado", async ({ request }) => {
+  const stays = [
+    [
+      "/catalogo/detalle/chevrolet-tracker-2022-rzkv76",
+      "/catalogo/detalle/chevrolet-tracker-blanco-2022-299",
+    ],
+    [
+      "/catalogo/detalle/hyundai-tucson-gl-20-2014-ghtd24",
+      "/catalogo/detalle/hyundai-tucson-gl-20-blanco-2014-231",
+    ],
+    [
+      "/catalogo/detalle/chevrolet-spark-gt-lt-12-2016-hlxb59",
+      "/catalogo/detalle/chevrolet-spark-gt-lt-12-verde-cocktail-2016-300",
+    ],
+  ] as const;
+
+  for (const [path, canonical] of stays) {
     const response = await request.get(path, {
       maxRedirects: 0,
       headers: { "user-agent": GOOGLEBOT },
     });
-    expect(response.status(), path).toBe(410);
-    expect((await response.text()).toLowerCase(), path).not.toContain("no encontrado");
+    expect(response.status(), path).toBe(301);
+    const location = response.headers().location ?? "";
+    expect(location, path).toContain(canonical);
+    expect(location, path).not.toMatch(/rgmotorschile|unidadeschile/);
+
+    const page = await html(request, canonical);
+    expect(page.response.status(), canonical).toBe(200);
+    expect(page.body, canonical).not.toContain("noindex");
+    expect(page.body, canonical).toContain("<h1");
+    expect(page.body, canonical).not.toMatch(PLATE);
   }
+
+  const sitemap = await html(request, "/sitemap.xml");
+  expect(sitemap.body).toContain("/catalogo/detalle/chevrolet-tracker-blanco-2022-299");
+  expect(sitemap.body).not.toContain("ford-ranger-4x4");
 });
 
 test("un slug inexistente responde 404", async ({ request }) => {
