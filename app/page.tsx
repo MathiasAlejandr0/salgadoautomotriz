@@ -5,6 +5,7 @@ import HomeProcess from "@/components/home/HomeProcess";
 import ShowroomMap from "@/components/home/ShowroomMap";
 import HomeTrust from "@/components/home/HomeTrust";
 import Footer from "@/components/layout/Footer";
+import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import { getFeaturedVehicles, getVehicles } from "@/lib/queries";
 import { getSearchOptions } from "@/lib/search-options";
 import type { Metadata } from "next";
@@ -43,6 +44,7 @@ export default async function HomePage() {
         <HomeTrust />
       </main>
       <Footer />
+      <WhatsAppFloat />
     </>
   );
 }

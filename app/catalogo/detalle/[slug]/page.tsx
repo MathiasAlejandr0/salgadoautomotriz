@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import VehicleDetail from "@/components/detail/VehicleDetail";
 import JsonLdVehicle from "@/components/seo/JsonLdVehicle";
 import JsonLdBreadcrumb from "@/components/seo/JsonLdBreadcrumb";
@@ -105,6 +106,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         <VehicleDetail vehicle={vehicle} heading={heading} waMessage={waMessage} />
       </main>
       <Footer />
+      <WhatsAppFloat />
     </>
   );
 }

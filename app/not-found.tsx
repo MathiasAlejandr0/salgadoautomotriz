@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Home, MessageCircle } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import { pageMetadata } from "@/lib/seo";
 import { waUrl } from "@/lib/site";
 
@@ -52,6 +53,7 @@ export default function NotFound() {
         </div>
       </main>
       <Footer />
+      <WhatsAppFloat />
     </>
   );
 }
