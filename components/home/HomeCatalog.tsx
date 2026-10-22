@@ -37,7 +37,7 @@ export default function HomeCatalog({
       <div className="mt-8 text-center sm:mt-10">
         <Link
           href="/catalogo"
-          className="inline-flex min-h-12 w-full max-w-sm items-center justify-center rounded-full border border-[#00BCFE]/40 px-8 py-3 text-sm font-semibold text-white hover:bg-[#00BCFE]/10 sm:w-auto"
+          className="btn btn-ghost min-h-12 w-full max-w-sm px-8 sm:w-auto"
         >
           Ver todos los {total} vehículos →
         </Link>

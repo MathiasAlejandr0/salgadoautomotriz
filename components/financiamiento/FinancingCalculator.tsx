@@ -126,7 +126,7 @@ export default function FinancingCalculator({ vehicles }: Props) {
         href={waUrl(waMsg)}
         target="_blank"
         rel="noopener noreferrer"
-        className="btn-wa flex w-full items-center justify-center gap-2 rounded-full px-6 py-4 text-sm"
+        className="btn btn-wa w-full"
       >
         <MessageCircle size={18} />
         Pedir preaprobación por WhatsApp

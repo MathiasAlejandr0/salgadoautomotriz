@@ -17,13 +17,13 @@ export default function HomeFinalCta() {
           href={waUrl("Hola, quiero consultar sobre un vehículo")}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-wa px-7 py-3.5 text-[15px] font-semibold text-white hover:bg-[#1ebe57]"
+          className="btn btn-wa px-7"
         >
           <MessageCircle size={18} /> Escribir por WhatsApp
         </a>
         <Link
           href="/catalogo"
-          className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-7 py-3.5 text-[15px] font-semibold text-white hover:border-brand-accent/40"
+          className="btn btn-ghost px-7"
         >
           Ver inventario <ArrowRight size={16} />
         </Link>

@@ -32,13 +32,13 @@ export default function NotFound() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
             href="/"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-accent px-6 py-3 text-sm font-bold text-[#041018] hover:bg-brand-accent2"
+            className="btn btn-primary"
           >
             <Home size={16} /> Ir al inicio
           </Link>
           <Link
             href="/catalogo"
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white hover:border-brand-accent/40"
+            className="btn btn-ghost"
           >
             Ver inventario <ArrowRight size={16} />
           </Link>
@@ -46,7 +46,7 @@ export default function NotFound() {
             href={waUrl("Hola, llegué a una página 404 y necesito ayuda")}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-wa px-6 py-3 text-sm font-semibold text-white hover:bg-[#1ebe57]"
+            className="btn btn-wa"
           >
             <MessageCircle size={16} /> WhatsApp
           </a>

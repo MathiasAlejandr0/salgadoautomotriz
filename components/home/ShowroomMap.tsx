@@ -27,7 +27,7 @@ export default function ShowroomMap() {
           href={visit}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#00BCFE] px-7 py-3.5 text-sm font-bold text-[#041018] sm:w-fit"
+          className="btn btn-primary min-h-12 w-full px-7 sm:w-fit"
         >
           Coordinar visita
         </a>

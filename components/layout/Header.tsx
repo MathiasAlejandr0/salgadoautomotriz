@@ -100,7 +100,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
             href={waUrl("Hola, quiero agendar una visita a Salgado Automotriz")}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg bg-[#00BCFE] px-4 py-2 text-[12px] font-bold text-white shadow-[0_0_18px_rgba(0,188,254,0.35)] transition hover:bg-[#33cfff]"
+            className="btn btn-primary btn-sm px-4"
           >
             Agendar visita
           </a>
@@ -136,7 +136,7 @@ export default function Header({ variant = "default" }: HeaderProps) {
             ))}
             <a
               href={waUrl("Hola, quiero agendar una visita")}
-              className="mt-2 rounded-lg bg-[#00BCFE] py-2.5 text-center text-sm font-bold text-white"
+              className="btn btn-primary mt-2 w-full"
             >
               Agendar visita
             </a>

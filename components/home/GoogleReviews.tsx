@@ -105,7 +105,7 @@ export default function GoogleReviews() {
             Ver todas en Google
           </a>
           <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer"
-            className="rounded-full bg-[#00BCFE] px-4 py-2 text-[13px] font-bold text-white shadow-[0_0_18px_rgba(0,188,254,0.3)] transition hover:bg-[#33cfff]">
+            className="btn btn-primary btn-sm px-4">
             Dejar una reseña
           </a>
         </div>

@@ -42,13 +42,13 @@ export default function HomeShowroom() {
               href={waUrl("Hola, quiero agendar una visita al showroom")}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-wa px-6 py-3 text-sm font-semibold text-white hover:bg-[#1ebe57]"
+              className="btn btn-wa"
             >
               <MessageCircle size={16} /> Agendar visita
             </a>
             <Link
               href="/contacto"
-              className="inline-flex items-center justify-center rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white hover:border-brand-accent/40"
+              className="btn btn-ghost"
             >
               Formulario de contacto
             </Link>

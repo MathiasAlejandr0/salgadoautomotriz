@@ -125,7 +125,7 @@ export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?
                   onClick={() => setActive(n.id)}
                   className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition ${
                     active === n.id
-                      ? "bg-[#00BCFE] text-[#041018] shadow-[0_0_18px_rgba(0,188,254,0.35)]"
+                      ? "bg-[#f4f7fa] text-[#07131d]"
                       : "text-white/60 hover:bg-white/5 hover:text-white"
                   }`}
                 >
@@ -183,7 +183,7 @@ export default function AdminConsole({ initialTab = "dashboard" }: { initialTab?
                 onClick={() => setActive(n.id)}
                 className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold ${
                   active === n.id
-                    ? "bg-[#00BCFE] text-[#041018]"
+                    ? "bg-[#f4f7fa] text-[#07131d]"
                     : "bg-[#0c2138] text-white/60"
                 }`}
               >
@@ -507,7 +507,7 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
               type="button"
               onClick={() => setSub(id)}
               className={`rounded-xl px-4 py-2 text-xs font-bold ${
-                sub === id ? "bg-[#00BCFE] text-[#041018]" : "text-white/60 hover:bg-white/5"
+                sub === id ? "bg-[#f4f7fa] text-[#07131d]" : "text-white/60 hover:bg-white/5"
               }`}
             >
               {label}
@@ -556,7 +556,7 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
             <button
               type="button"
               onClick={() => setEditing("new")}
-              className="rounded-xl bg-[#00BCFE] px-5 py-2.5 text-xs font-bold text-[#041018]"
+              className="btn btn-primary btn-sm px-5"
             >
               + Publicar Vehículo
             </button>
@@ -639,10 +639,10 @@ function Inventory({ vehicles, onChange }: { vehicles: AdminVehicle[]; onChange:
                           </td>
                           <td className="py-3 text-right">
                             <div className="flex justify-end gap-1.5">
-                              <button type="button" onClick={() => setEditing(v)} className="rounded-lg bg-white/10 px-2.5 py-1 text-xs hover:bg-[#00BCFE] hover:text-[#041018]">
+                              <button type="button" onClick={() => setEditing(v)} className="rounded-lg bg-white/10 px-2.5 py-1 text-xs hover:bg-[#f4f7fa] hover:text-[#07131d]">
                                 Editar
                               </button>
-                              <button type="button" onClick={() => { setPhotoSlug(v.slug); setSub("fotos"); }} className="rounded-lg bg-white/5 px-2.5 py-1 text-xs text-white/80 hover:bg-[#00BCFE] hover:text-[#041018]">
+                              <button type="button" onClick={() => { setPhotoSlug(v.slug); setSub("fotos"); }} className="rounded-lg bg-white/5 px-2.5 py-1 text-xs text-white/80 hover:bg-[#f4f7fa] hover:text-[#07131d]">
                                 Fotos
                               </button>
                               <button type="button" onClick={() => duplicate(v)} className="rounded-lg bg-white/5 px-2 py-1 text-xs text-white/60" title="Duplicar">
@@ -782,7 +782,7 @@ function VehicleModal({
           <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-xs text-white/60">
             Cancelar
           </button>
-          <button type="submit" className="rounded-xl bg-[#00BCFE] px-4 py-2 text-xs font-bold text-[#041018]">
+          <button type="submit" className="btn btn-primary btn-sm">
             Guardar
           </button>
         </div>
@@ -830,7 +830,7 @@ function Crm({
               type="button"
               onClick={() => setTab(t.id)}
               className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold ${
-                tab === t.id ? "bg-[#00BCFE] text-[#041018]" : "text-white/60 hover:bg-white/5"
+                tab === t.id ? "bg-[#f4f7fa] text-[#07131d]" : "text-white/60 hover:bg-white/5"
               }`}
             >
               {t.label}
@@ -915,7 +915,7 @@ function ReviewsPanel({ reviews, onChange }: { reviews: Review[]; onChange: () =
         <input required value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre" className="rounded-xl border border-white/15 bg-[#050a14] px-3 py-2 text-xs" />
         <input value={ciudad} onChange={(e) => setCiudad(e.target.value)} placeholder="Ciudad" className="rounded-xl border border-white/15 bg-[#050a14] px-3 py-2 text-xs" />
         <input required value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Texto" className="rounded-xl border border-white/15 bg-[#050a14] px-3 py-2 text-xs sm:col-span-2" />
-        <button type="submit" className="rounded-xl bg-[#00BCFE] px-3 py-2 text-xs font-bold text-[#041018]">
+        <button type="submit" className="btn btn-primary btn-sm">
           Publicar reseña
         </button>
       </form>
@@ -1051,7 +1051,7 @@ function PhotoOrder({ vehicle, onDone }: { vehicle: AdminVehicle; onDone: () => 
               {i === 0 ? (
                 <span className="font-bold text-[#00BCFE]">Portada</span>
               ) : (
-                <button type="button" disabled={busy} onClick={() => move(i, 0)} className="rounded bg-white/10 px-1.5 hover:bg-[#00BCFE] hover:text-[#041018]">Portada</button>
+                <button type="button" disabled={busy} onClick={() => move(i, 0)} className="rounded bg-white/10 px-1.5 hover:bg-[#f4f7fa] hover:text-[#07131d]">Portada</button>
               )}
               <button type="button" aria-label="Mover a la derecha" disabled={busy || i === items.length - 1} onClick={() => move(i, i + 1)} className="rounded bg-white/10 px-1.5 disabled:opacity-30">▶</button>
             </div>
@@ -1063,7 +1063,7 @@ function PhotoOrder({ vehicle, onDone }: { vehicle: AdminVehicle; onDone: () => 
           type="button"
           disabled={busy || !dirty}
           onClick={() => void send({ order: items.map((x) => x.id) }, "Orden guardado")}
-          className="rounded-xl bg-[#00BCFE] px-4 py-2 text-xs font-bold text-[#041018] disabled:opacity-40"
+          className="btn btn-primary btn-sm disabled:opacity-40"
         >
           Guardar orden
         </button>
