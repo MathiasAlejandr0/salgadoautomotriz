@@ -51,8 +51,10 @@ function h_public_vehicle(string $slug): void
 {
     $slug = strtolower($slug);
     foreach (published_identity() as $item) {
-        if ($item['slug'] === $slug || in_array($slug, $item['legacy'], true)) {
-            json_out(['vehicle' => public_vehicle($item['row'], prefer_static_slug($item['row'], $item['slug']))]);
+        // La lista publica el slug de prefer_static_slug; el detalle debe aceptarlo también.
+        $public = prefer_static_slug($item['row'], $item['slug']);
+        if ($public === $slug || $item['slug'] === $slug || in_array($slug, $item['legacy'], true)) {
+            json_out(['vehicle' => public_vehicle($item['row'], $public)]);
         }
     }
     json_out(['error' => 'No encontrado'], 404);
