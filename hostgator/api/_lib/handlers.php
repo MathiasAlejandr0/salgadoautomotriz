@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/photo_exclusions.php';
+
 const STATUSES = ['Disponible', 'En reserva', 'Vendido', 'Borrador'];
 
 function public_image_path(string $p): string
@@ -24,6 +26,19 @@ function public_vehicle(array $v, ?string $slug = null): array
     $desc = (string) ($v['description'] ?? '');
     if ($desc === '' || preg_match('/patente/i', $desc)) {
         $v['description'] = public_blurb($v);
+    }
+    if (isset($v['vehicle_images']) && is_array($v['vehicle_images'])) {
+        $v['vehicle_images'] = images_without_excluded($v['vehicle_images']);
+    }
+    $cover = '';
+    if (!empty($v['vehicle_images'][0]['storage_path'])) {
+        $cover = (string) $v['vehicle_images'][0]['storage_path'];
+    }
+    foreach (['image', 'thumb', 'thumbnail'] as $field) {
+        if (!isset($v[$field]) || !is_string($v[$field]) || !path_has_excluded_photo($v[$field])) {
+            continue;
+        }
+        $v[$field] = $cover !== '' ? $cover : FALLBACK_IMAGE;
     }
     return $v;
 }
@@ -613,6 +628,12 @@ function replace_images(string $vehicleId, $images): void
             continue;
         }
         $m = $meta[$p] ?? null;
+        $driveId = is_array($m) ? ($m['drive_file_id'] ?? null) : null;
+        $thumb = is_array($m) ? ($m['thumb_path'] ?? null) : null;
+        // Una foto excluida no ocupa cupo: la siguiente válida entra dentro de las 12.
+        if (is_photo_excluded($driveId) || path_has_excluded_photo($p) || path_has_excluded_photo(is_string($thumb) ? $thumb : null)) {
+            continue;
+        }
         $ins->execute([uuid4(), $vehicleId, $p, $m['thumb_path'] ?? null, $m['source'] ?? (str_starts_with($p, '/uploads/vehicles/') ? 'upload' : 'drive'),
             $m['drive_file_id'] ?? null, $i, now_db()]);
         if (++$i >= 12) {

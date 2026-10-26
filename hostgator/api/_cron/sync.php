@@ -24,6 +24,7 @@ if (PHP_SAPI !== 'cli') {
 require dirname(__DIR__) . '/_lib/app.php';
 require dirname(__DIR__) . '/_lib/specs.php';
 require dirname(__DIR__) . '/_lib/media.php';
+require_once dirname(__DIR__) . '/_lib/photo_exclusions.php';
 
 const PLACEHOLDER = '/placeholder-car.svg';
 
@@ -663,22 +664,52 @@ function merged_photo_ids(array $candidates, string $stockId, int $limit = 12): 
     $seen = [];
     foreach ($candidates as $folder) {
         try {
-            foreach (photo_files($folder['id']) as $f) {
-                $key = mb_strtolower($f['name']);
-                if (isset($seen[$key])) {
-                    continue;
-                }
-                $seen[$key] = true;
-                $ids[] = $f['id'];
-                if (count($ids) >= $limit) {
-                    return $ids;
-                }
+            collect_public_photo_ids(photo_files($folder['id']), $seen, $ids, $limit);
+            if (count($ids) >= $limit) {
+                return $ids;
             }
         } catch (Throwable $e) {
             logln("Drive ID {$stockId} ({$folder['name']}): " . $e->getMessage());
         }
     }
     return $ids;
+}
+
+/**
+ * Quita de la base y de /uploads/drive las fotos con patente descubierta.
+ * Idempotente: si la fila o el archivo ya no están, sigue. No toca Drive.
+ */
+function purge_excluded_vehicle_photos(PDO $pdo): int
+{
+    $rows = $pdo->query('SELECT id, vehicle_id, storage_path, thumb_path, drive_file_id FROM vehicle_images')->fetchAll();
+    $drop = $pdo->prepare('DELETE FROM vehicle_images WHERE id = ?');
+    $touched = [];
+    $removed = 0;
+    foreach ($rows as $img) {
+        if (!image_record_is_excluded($img)) {
+            continue;
+        }
+        $drop->execute([$img['id']]);
+        $removed++;
+        $touched[(string) $img['vehicle_id']] = true;
+    }
+    $dir = uploads_dir() . '/drive';
+    foreach (excluded_photo_ids() as $fileId) {
+        remove_excluded_drive_files($dir, $fileId);
+    }
+    if ($touched) {
+        $list = $pdo->prepare('SELECT id FROM vehicle_images WHERE vehicle_id = ? ORDER BY sort_order ASC, created_at ASC, id ASC');
+        $set = $pdo->prepare('UPDATE vehicle_images SET sort_order = ? WHERE id = ? AND vehicle_id = ?');
+        foreach (array_keys($touched) as $vehicleId) {
+            $list->execute([$vehicleId]);
+            $order = 0;
+            foreach ($list->fetchAll() as $row) {
+                $set->execute([$order, $row['id'], $vehicleId]);
+                $order++;
+            }
+        }
+    }
+    return $removed;
 }
 
 /**
@@ -817,6 +848,11 @@ $pdo->prepare('INSERT INTO sync_runs (started_at) VALUES (?)')->execute([now_db(
 $runId = (int) $pdo->lastInsertId();
 
 try {
+    $purged = purge_excluded_vehicle_photos($pdo);
+    if ($purged > 0) {
+        logln('Fotos con patente descubierta retiradas: ' . $purged);
+    }
+
     $sheet = google_id(cfg('sheet_id'), '1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc');
     $tab = (string) cfg('sheet_tab', 'SALGADO AUTOMOTRIZ');
     $csv = sheet_csv($sheet, $tab);
