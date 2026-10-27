@@ -375,18 +375,20 @@ function header_map(array $h): array
  * marca donde iba la patente. El precio de lista cae en la columna del año y el de
  * oferta queda en la columna de precio. La ubicación pasa una columna a la derecha.
  */
-function shift_map(array $map): array
+function shift_map(array $map, int $by = 1): array
 {
     $shifted = $map;
     $shifted['origin'] = -1;
     $shifted['id'] = -1;
     foreach (['plate', 'brand', 'model', 'color', 'year'] as $key) {
-        if ($map[$key] > 0) {
-            $shifted[$key] = $map[$key] - 1;
+        if ($map[$key] >= $by) {
+            $shifted[$key] = $map[$key] - $by;
         }
     }
-    $shifted['offer'] = $map['price'];
-    $shifted['price'] = $map['year'];
+    // Lista, oferta y km siguen al año, sin importar cuánto se corrió el bloque.
+    $shifted['price'] = $shifted['year'] + 1;
+    $shifted['offer'] = $shifted['year'] + 2;
+    $shifted['km'] = $shifted['year'] + 3;
     if ($map['location'] >= 0) {
         $shifted['location'] = $map['location'] + 1;
         $shifted['location_alt'] = $map['location'];
@@ -395,16 +397,26 @@ function shift_map(array $map): array
     return $shifted;
 }
 
-function row_looks_shifted(array $row, array $map): bool
+/** Cuántas columnas a la izquierda quedó la patente respecto del encabezado (0 = no está corrida). */
+function row_shift_by(array $row, array $map): int
 {
     if ($map['shifted'] || $map['plate'] <= 0 || $map['year'] <= 0) {
-        return false;
+        return 0;
     }
-    $plateHere = clean_plate(cell($row, $map['plate']));
-    $plateLeft = clean_plate(cell($row, $map['plate'] - 1));
     $yearNow = (int) date('Y');
     $yearOk = static fn (int $y): bool => $y >= 1990 && $y <= $yearNow + 1;
-    return $plateHere === '' && $plateLeft !== '' && !$yearOk((int) cell($row, $map['year'])) && $yearOk((int) cell($row, $map['year'] - 1));
+    if (clean_plate(cell($row, $map['plate'])) !== '') {
+        return 0;
+    }
+    foreach ([1, 2] as $by) {
+        if ($map['plate'] - $by >= 0 && $map['year'] - $by >= 0
+            && clean_plate(cell($row, $map['plate'] - $by)) !== ''
+            && !$yearOk((int) cell($row, $map['year']))
+            && $yearOk((int) cell($row, $map['year'] - $by))) {
+            return $by;
+        }
+    }
+    return 0;
 }
 
 function sheet_stock_id($raw): string
@@ -524,8 +536,9 @@ function parse_salgado_rows(array $rows): array
         if ($map === null) {
             continue;
         }
-        if (row_looks_shifted($row, $map)) {
-            $map = shift_map($map);
+        $by = row_shift_by($row, $map);
+        if ($by > 0) {
+            $map = shift_map($map, $by);
         }
         $vehicle = parse_vehicle_row($row, $map, $section);
         if ($vehicle === null || isset($seen[$vehicle['plate']])) {
