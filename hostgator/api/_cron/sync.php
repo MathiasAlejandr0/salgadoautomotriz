@@ -25,6 +25,7 @@ require dirname(__DIR__) . '/_lib/app.php';
 require dirname(__DIR__) . '/_lib/specs.php';
 require dirname(__DIR__) . '/_lib/media.php';
 require_once dirname(__DIR__) . '/_lib/photo_exclusions.php';
+require_once dirname(__DIR__) . '/_lib/curated_photos.php';
 
 const PLACEHOLDER = '/placeholder-car.svg';
 
@@ -762,6 +763,46 @@ function mirror_drive_photo(string $fileId, int &$budget): ?array
     return null;
 }
 
+/**
+ * Fotos curadas del repo (api/_lib/curated/<dir>/NN.webp): las copia a uploads/curated/<dir>/
+ * (solo si faltan o cambió el tamaño) y devuelve [[ruta, miniatura], ...] en orden, portada primero.
+ * Devuelve null si falta algún archivo fuente o no se pudo copiar (no se publica a medias).
+ *
+ * @return array<int, array{0: string, 1: string}>|null
+ */
+function publish_curated_photos(string $stockId): ?array
+{
+    $cur = curated_photos()[$stockId] ?? null;
+    if (!$cur || !preg_match('/^[a-f0-9]{12}$/', $cur['dir'])) {
+        return null;
+    }
+    $src = dirname(__DIR__) . '/_lib/curated/' . $cur['dir'];
+    $dst = uploads_dir() . '/curated/' . $cur['dir'];
+    if (!is_dir($dst) && !@mkdir($dst, 0755, true)) {
+        logln("Fotos curadas {$cur['dir']}: no se pudo crear la carpeta");
+        return null;
+    }
+    $out = [];
+    for ($i = 1; $i <= $cur['count']; $i++) {
+        $pair = [];
+        foreach ([sprintf('%02d.webp', $i), sprintf('%02d_t.webp', $i)] as $name) {
+            if (!is_file("{$src}/{$name}")) {
+                logln("Fotos curadas {$cur['dir']}: falta {$name} en el repo");
+                return null;
+            }
+            if (!is_file("{$dst}/{$name}") || filesize("{$dst}/{$name}") !== filesize("{$src}/{$name}")) {
+                if (!@copy("{$src}/{$name}", "{$dst}/{$name}.tmp") || !@rename("{$dst}/{$name}.tmp", "{$dst}/{$name}")) {
+                    logln("Fotos curadas {$cur['dir']}: no se pudo copiar {$name}");
+                    return null;
+                }
+            }
+            $pair[] = "/uploads/curated/{$cur['dir']}/{$name}";
+        }
+        $out[] = $pair;
+    }
+    return $out;
+}
+
 function heic_to_jpeg(string $bytes): ?string
 {
     if (!heic_supported()) {
@@ -902,14 +943,15 @@ try {
     $budget = (int) cfg('sync_photo_budget', 150);
     foreach ($rows as &$r) {
         $label = !empty($r['hasSheetId']) ? $r['stockId'] : $r['plate'];
-        $r['photos'] = merged_photo_ids(drive_folders_for_row($driveIndex, $r), $label);
+        // Unidades con fotos curadas en el repo: no se usa Drive para ellas.
+        $r['photos'] = isset(curated_photos()[$r['stockId']]) ? [] : merged_photo_ids(drive_folders_for_row($driveIndex, $r), $label);
     }
     unset($r);
 
     $find = $pdo->prepare('SELECT id, source, photos_locked FROM vehicles WHERE id = ? OR stock_id = ? OR plate = ? LIMIT 1');
     $realPhotos = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE '%placeholder%'");
     $hasRealPhotos = function (array $r) use ($find, $realPhotos): bool {
-        if ($r['photos']) {
+        if ($r['photos'] || isset(curated_photos()[$r['stockId']])) {
             return true;
         }
         $find->execute(['sa-' . $r['stockId'], $r['stockId'], $r['plate']]);
@@ -959,6 +1001,9 @@ try {
             }
         }
 
+        // Fotos curadas del repo: copia de archivos fuera de la transacción.
+        $curated = publish_curated_photos($r['stockId']);
+
         $pdo->beginTransaction();
         $find->execute([$id, $r['stockId'], $r['plate']]);
         $found = $find->fetch();
@@ -985,6 +1030,20 @@ try {
         if ($deferred && $found) {
             $locked = true;
         }
+        if ($curated) {
+            // Solo se aplican si el auto aún no tiene fotos subidas (source=upload): después de la
+            // primera vez quedan como 'upload' + photos_locked, y ni el sync ni Drive las pisan.
+            $uploaded = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND source = 'upload'");
+            $uploaded->execute([$id]);
+            if ((int) $uploaded->fetchColumn() === 0) {
+                $delImg->execute([$id]);
+                foreach ($curated as $i => [$path, $thumb]) {
+                    $insImg->execute([uuid4(), $id, $path, $thumb, 'upload', null, $i, $now]);
+                }
+                $pdo->prepare('UPDATE vehicles SET photos_locked = 1 WHERE id = ?')->execute([$id]);
+            }
+            $locked = true;
+        }
         if (!$locked && ($images || !$found)) {
             $delImg->execute([$id]);
             if ($images) {
@@ -993,6 +1052,13 @@ try {
                 }
             } else {
                 $insImg->execute([uuid4(), $id, PLACEHOLDER, null, 'drive', null, 0, $now]);
+            }
+        }
+        // Ocultas hasta tener fotos reales: se publican solas cuando llegan fotos (Drive o admin).
+        if (in_array($r['stockId'], hidden_until_photos(), true)) {
+            $realPhotos->execute([$id]);
+            if ((int) $realPhotos->fetchColumn() === 0) {
+                $pdo->prepare('UPDATE vehicles SET published = 0, featured = 0 WHERE id = ?')->execute([$id]);
             }
         }
         $pdo->commit();
