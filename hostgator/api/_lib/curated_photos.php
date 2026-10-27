@@ -6,7 +6,8 @@ declare(strict_types=1);
  * Cada unidad: stock_id => [carpeta opaca, cantidad]. Las imágenes están en
  * api/_lib/curated/<carpeta>/NN.webp (+ NN_t.webp), NN = orden, 01 = portada.
  * El sync las copia a uploads/curated/<carpeta>/ y las deja bloqueadas (source=upload).
- * No se usan patentes en rutas ni URLs.
+ * Si la carpeta de una unidad cambia, el sync reemplaza ese set una vez y conserva
+ * las fotos que el admin haya subido a mano. No se usan patentes en rutas ni URLs.
  */
 
 /** @return array<string, array{dir: string, count: int}> */
@@ -23,24 +24,33 @@ function curated_photos(): array
         'RGBP20' => ['dir' => 'da4fe0f31548', 'count' => 5],
         'RGBP23' => ['dir' => 'b85c57b542cc', 'count' => 9],
         'RGGZ96' => ['dir' => '498762800952', 'count' => 10],
-        'RHCL44' => ['dir' => 'b9d8cf8ba0f5', 'count' => 12],
+        'RHCL44' => ['dir' => '2b6d111bb4e1', 'count' => 9],
         'RKRG58' => ['dir' => '5920717b3370', 'count' => 6],
         'RPSH28' => ['dir' => '962e6a596257', 'count' => 9],
         'RRKB78' => ['dir' => '1dc13f690a3b', 'count' => 10],
+        'RRYJ47' => ['dir' => '5dc1de8e9d7b', 'count' => 9],
         'RXFK24' => ['dir' => 'b9e69bb8475d', 'count' => 4],
         'RZTG13' => ['dir' => '5165c74a97e6', 'count' => 8],
         'RZVK91' => ['dir' => 'b2ce021d3239', 'count' => 11],
         'RZWV49' => ['dir' => 'd7b2a4b6083f', 'count' => 6],
+        'SBJR89' => ['dir' => '749997b749fa', 'count' => 8],
         'SBZG55' => ['dir' => '316e8edc8bde', 'count' => 8],
         'SCDW37' => ['dir' => '3375f830a692', 'count' => 12],
         'SDJT43' => ['dir' => 'a5dad43599ad', 'count' => 11],
+        'SFBL43' => ['dir' => '185970141ab1', 'count' => 9],
         'SFYB29' => ['dir' => '575ff33a4478', 'count' => 8],
+        'SHYL53' => ['dir' => 'bcf48f84e1b3', 'count' => 9],
+        'SKLF13' => ['dir' => '5805393b91d0', 'count' => 11],
         'SLGD85' => ['dir' => '4a0f1245edab', 'count' => 10],
         'SSDD57' => ['dir' => '736da773bfc9', 'count' => 8],
         'STPZ87' => ['dir' => '7f56c57c8dd6', 'count' => 12],
         'SVFB26' => ['dir' => '3436377c80df', 'count' => 10],
         'SVFD42' => ['dir' => '0123050d41b6', 'count' => 10],
+        'SWDV33' => ['dir' => '659f1299f49c', 'count' => 8],
+        'SXKK11' => ['dir' => '5bd7bc27319d', 'count' => 9],
         'THLV62' => ['dir' => '292bec044fda', 'count' => 11],
+        'THSR65' => ['dir' => 'd183ec270531', 'count' => 12],
+        'TSGL82' => ['dir' => 'b9b9a3ec681f', 'count' => 9],
     ];
 }
 

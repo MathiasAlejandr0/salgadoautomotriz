@@ -11,6 +11,8 @@ declare(strict_types=1);
 
  * Fotos de Drive: se copian a /uploads/drive como WebP + miniatura (GD).
  * Fotos subidas a mano o con orden/portada fijada en el admin (photos_locked) no se tocan.
+ * Fotos curadas del repo: se publican una vez (source=upload, photos_locked=1).
+ * Si la carpeta del mapa cambió, se reemplaza solo ese set; las subidas a mano quedan.
  *
  * cPanel → Cron Jobs (cada 10 min):
  *   /usr/local/bin/php /home/<usuario>/public_html/api/_cron/sync.php >/dev/null 2>&1
@@ -764,6 +766,93 @@ function mirror_drive_photo(string $fileId, int &$budget): ?array
 }
 
 /**
+ * Qué hacer con el set curado, sin volver a pisarlo en cada sync.
+ *
+ * fresh: no hay fotos source=upload (siguen las de Drive, o no hay) → se reemplaza la galería.
+ * refresh: las fotos upload son solo una carpeta curada distinta a la del mapa → se reemplaza entera.
+ * refresh-keep: cambió esa carpeta y además hay fotos subidas a mano → se cambia el set y esas quedan.
+ * keep: la carpeta guardada ya es la del mapa, o no hay un set curado único que rotar.
+ *
+ * @param list<array{source?: string, storage_path?: string}> $images
+ * @return array{action: string, saved_dir: ?string}
+ */
+function curated_publish_plan(array $images, string $dir): array
+{
+    $dirs = [];
+    $uploads = 0;
+    $manual = 0;
+    foreach ($images as $img) {
+        $source = (string) ($img['source'] ?? '');
+        $path = (string) ($img['storage_path'] ?? '');
+        $curatedDir = null;
+        if (preg_match('#^/uploads/curated/([a-f0-9]{12})/#', $path, $m)) {
+            $curatedDir = $m[1];
+        }
+        // /uploads/vehicles/ es una subida del admin aunque el source no haya quedado en 'upload'.
+        $manualPath = preg_match('#^/uploads/vehicles/#', $path) === 1;
+        if ($source !== 'upload' && !$manualPath) {
+            continue;
+        }
+        $uploads++;
+        if ($curatedDir !== null && $source === 'upload' && !$manualPath) {
+            $dirs[$curatedDir] = true;
+        } else {
+            $manual++;
+        }
+    }
+    if ($uploads === 0) {
+        return ['action' => 'fresh', 'saved_dir' => null];
+    }
+    if (count($dirs) === 1 && !isset($dirs[$dir])) {
+        $saved = array_key_first($dirs);
+        return [
+            'action' => $manual === 0 ? 'refresh' : 'refresh-keep',
+            'saved_dir' => is_string($saved) ? $saved : null,
+        ];
+    }
+    return ['action' => 'keep', 'saved_dir' => null];
+}
+
+/**
+ * @param array<int, array{0: string, 1: string}> $pairs
+ */
+function insert_curated_set(PDOStatement $ins, string $vehicleId, array $pairs, string $now): void
+{
+    foreach ($pairs as $i => [$path, $thumb]) {
+        $ins->execute([uuid4(), $vehicleId, $path, $thumb, 'upload', null, $i, $now]);
+    }
+}
+
+/** Borra la copia publicada de una carpeta curada que ya no está en el mapa. */
+function remove_published_curated_dir(string $dir): void
+{
+    if (!preg_match('/^[a-f0-9]{12}$/', $dir)) {
+        return;
+    }
+    foreach (curated_photos() as $cur) {
+        if (($cur['dir'] ?? '') === $dir) {
+            return;
+        }
+    }
+    $path = uploads_dir() . '/curated/' . $dir;
+    if (!is_dir($path)) {
+        return;
+    }
+    foreach (scandir($path) ?: [] as $name) {
+        if ($name === '.' || $name === '..') {
+            continue;
+        }
+        $file = $path . '/' . $name;
+        if (is_file($file) && !@unlink($file)) {
+            logln("Fotos curadas {$dir}: no se pudo borrar {$name} en uploads");
+        }
+    }
+    if (!@rmdir($path)) {
+        logln("Fotos curadas {$dir}: la carpeta vieja de uploads quedó con archivos");
+    }
+}
+
+/**
  * Fotos curadas del repo (api/_lib/curated/<dir>/NN.webp): las copia a uploads/curated/<dir>/
  * (solo si faltan o cambió el tamaño) y devuelve [[ruta, miniatura], ...] en orden, portada primero.
  * Devuelve null si falta algún archivo fuente o no se pudo copiar (no se publica a medias).
@@ -978,9 +1067,16 @@ try {
     $delImg = $pdo->prepare('DELETE FROM vehicle_images WHERE vehicle_id = ?');
     $insImg = $pdo->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, source, drive_file_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?)');
     $hasUploads = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND (source = 'upload' OR storage_path LIKE '/uploads/vehicles/%')");
+    $listImgs = $pdo->prepare('SELECT source, storage_path FROM vehicle_images WHERE vehicle_id = ?');
+    $delDriveLeftovers = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND source <> 'upload' AND storage_path NOT LIKE '/uploads/vehicles/%'");
+    $delCuratedDir = $pdo->prepare('DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE ?');
+    $restImgs = $pdo->prepare('SELECT id FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE ? ORDER BY sort_order ASC, created_at ASC, id ASC');
+    $setImgOrder = $pdo->prepare('UPDATE vehicle_images SET sort_order = ? WHERE id = ? AND vehicle_id = ?');
+    $lockPhotos = $pdo->prepare('UPDATE vehicles SET photos_locked = 1 WHERE id = ?');
     $photoStats = ['mirrored' => 0, 'skipped' => 0];
 
     foreach ($rows as $rank => $r) {
+        $retireCuratedDir = null;
         $id = 'sa-' . $r['stockId'];
         $slug = slugify("{$r['brand']} {$r['model']} {$r['year']} {$r['plate']}");
         $desc = "Patente {$r['plate']}. Ubicación: {$r['location']}. Origen: {$r['origin']}.";
@@ -1031,16 +1127,38 @@ try {
             $locked = true;
         }
         if ($curated) {
-            // Solo se aplican si el auto aún no tiene fotos subidas (source=upload): después de la
-            // primera vez quedan como 'upload' + photos_locked, y ni el sync ni Drive las pisan.
-            $uploaded = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND source = 'upload'");
-            $uploaded->execute([$id]);
-            if ((int) $uploaded->fetchColumn() === 0) {
+            // La primera vez reemplazan a Drive. Si la carpeta del mapa cambió respecto a la
+            // guardada en /uploads/curated/<carpeta>/, se reemplaza ese set una sola vez.
+            // Las fotos que el admin subió a mano (otra ruta, source=upload) no se borran.
+            // Con la carpeta ya al día no se vuelve a pisar: quedan source=upload y photos_locked.
+            $curDir = (string) (curated_photos()[$r['stockId']]['dir'] ?? '');
+            $listImgs->execute([$id]);
+            $plan = curated_publish_plan($listImgs->fetchAll(), $curDir);
+            $savedDir = $plan['saved_dir'];
+            $rotating = ($plan['action'] === 'refresh' || $plan['action'] === 'refresh-keep')
+                && is_string($savedDir)
+                && preg_match('/^[a-f0-9]{12}$/', $savedDir) === 1
+                && $savedDir !== $curDir;
+            if ($plan['action'] === 'fresh' || ($plan['action'] === 'refresh' && $rotating)) {
                 $delImg->execute([$id]);
-                foreach ($curated as $i => [$path, $thumb]) {
-                    $insImg->execute([uuid4(), $id, $path, $thumb, 'upload', null, $i, $now]);
+                insert_curated_set($insImg, $id, $curated, $now);
+                $lockPhotos->execute([$id]);
+                if ($rotating) {
+                    logln("Fotos curadas {$curDir}: reemplaza la carpeta {$savedDir}");
+                    $retireCuratedDir = $savedDir;
                 }
-                $pdo->prepare('UPDATE vehicles SET photos_locked = 1 WHERE id = ?')->execute([$id]);
+            } elseif ($plan['action'] === 'refresh-keep' && $rotating) {
+                $delCuratedDir->execute([$id, '/uploads/curated/' . $savedDir . '/%']);
+                $delDriveLeftovers->execute([$id]);
+                insert_curated_set($insImg, $id, $curated, $now);
+                $restImgs->execute([$id, '/uploads/curated/' . $curDir . '/%']);
+                $n = count($curated);
+                foreach ($restImgs->fetchAll() as $row) {
+                    $setImgOrder->execute([$n++, $row['id'], $id]);
+                }
+                $lockPhotos->execute([$id]);
+                logln("Fotos curadas {$curDir}: reemplaza la carpeta {$savedDir} y conserva las subidas a mano");
+                $retireCuratedDir = $savedDir;
             }
             $locked = true;
         }
@@ -1062,6 +1180,9 @@ try {
             }
         }
         $pdo->commit();
+        if (is_string($retireCuratedDir)) {
+            remove_published_curated_dir($retireCuratedDir);
+        }
         $keep[] = $id;
     }
 
