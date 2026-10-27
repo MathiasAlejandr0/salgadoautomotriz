@@ -33,9 +33,6 @@ export default function VehicleCard({ vehicle, glow = false }: VehicleCardProps)
           className="object-contain object-center transition-transform duration-700 group-hover:scale-[1.04]"
           sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
         />
-        <span className="absolute left-3 top-3 rounded-md bg-brand-accent px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#041018]">
-          Pie mínimo
-        </span>
       </div>
       <div className="p-5">
         <h3 className="text-[15px] font-black uppercase tracking-wide text-white">
