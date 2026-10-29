@@ -6,6 +6,7 @@ import { MOCK_VEHICLES } from "@/lib/mock-data";
 import { canUseMockFallback } from "@/lib/env";
 import { applyFilters, catalogFacets, type VehicleFilters } from "@/lib/filters";
 import { fetchPublicApiVehicles } from "@/lib/inventory/public-api";
+import { takePublishedGallery, withPreferredCover } from "@/lib/preferred-covers";
 import { branchOf } from "@/lib/branch";
 import { annotateStock, forPublic, type StockUnit } from "@/lib/vehicle-public";
 
@@ -164,9 +165,22 @@ async function loadInventoryRaw(): Promise<VehicleWithImages[]> {
   const bySlug = new Map(units.map((unit) => [unit.slug, unit]));
   let added = 0;
   for (const vehicle of api) {
-    if (bySlug.has(vehicle.slug)) continue;
+    const existing = bySlug.get(vehicle.slug);
+    if (existing) {
+      // La planilla no trae las fotos de /uploads. La galería de la API es la
+      // que ve la tarjeta y la ficha; la portada preferida queda primera.
+      const next = takePublishedGallery(existing, vehicle);
+      existing.stock_id = next.stock_id;
+      existing.vehicle_images = next.vehicle_images;
+      continue;
+    }
     // El slug ya es el canónico de la API: no se vuelve a calcular.
-    const unit: StockUnit = { ...vehicle, legacySlugs: [], branch: branchOf(vehicle.location) };
+    const unit: StockUnit = {
+      ...vehicle,
+      vehicle_images: withPreferredCover(vehicle.vehicle_images, vehicle.stock_id),
+      legacySlugs: [],
+      branch: branchOf(vehicle.location),
+    };
     bySlug.set(vehicle.slug, unit);
     added++;
   }

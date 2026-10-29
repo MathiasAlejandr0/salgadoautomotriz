@@ -10,8 +10,11 @@ declare(strict_types=1);
  * ni pierde fotos). Solo toca vehículos con source='sheet'; los del admin no.
 
  * Fotos de Drive: se copian a /uploads/drive como WebP + miniatura (GD).
- * Fotos subidas a mano o con orden/portada fijada en el admin (photos_locked) no se tocan.
+ * Fotos subidas a mano o con orden fijado en el admin (photos_locked) no se reemplazan.
+ * La portada preferida (preferred_covers.php) sí se reaplica en cada sync, también
+ * con photos_locked: esa foto pasa a sort_order 0 y el resto conserva su orden.
  * Fotos curadas del repo: se publican una vez (source=upload, photos_locked=1).
+ * Si la foto preferida de un curado no es la 01, se reordena el mapa al publicar.
  * Si la carpeta del mapa cambió, se reemplaza solo ese set; las subidas a mano quedan.
  *
  * cPanel → Cron Jobs (cada 10 min):
@@ -28,6 +31,7 @@ require dirname(__DIR__) . '/_lib/specs.php';
 require dirname(__DIR__) . '/_lib/media.php';
 require_once dirname(__DIR__) . '/_lib/photo_exclusions.php';
 require_once dirname(__DIR__) . '/_lib/curated_photos.php';
+require_once dirname(__DIR__) . '/_lib/preferred_covers.php';
 
 const PLACEHOLDER = '/placeholder-car.svg';
 
@@ -889,7 +893,9 @@ function publish_curated_photos(string $stockId): ?array
         }
         $out[] = $pair;
     }
-    return $out;
+    // Si la portada preferida es otro archivo de esta carpeta, abre la galería.
+    // Si no coincide con ningún NN.webp, el mapa sigue 01, 02, 03…
+    return order_curated_pairs($out, $stockId);
 }
 
 function heic_to_jpeg(string $bytes): ?string
@@ -994,6 +1000,12 @@ try {
     $purged = purge_excluded_vehicle_photos($pdo);
     if ($purged > 0) {
         logln('Fotos con patente descubierta retiradas: ' . $purged);
+    }
+    // Antes de reescribir galerías: deja la portada bien en lo que ya está en MySQL
+    // (curados y photos_locked incluidos). El cierre del sync lo repite.
+    $covers = apply_preferred_covers($pdo);
+    if ($covers > 0) {
+        logln('Portadas preferidas actualizadas: ' . $covers);
     }
 
     $sheet = google_id(cfg('sheet_id'), '1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc');
@@ -1165,7 +1177,7 @@ try {
         if (!$locked && ($images || !$found)) {
             $delImg->execute([$id]);
             if ($images) {
-                foreach ($images as $i => [$path, $thumb, $fileId]) {
+                foreach (order_drive_image_rows($images, $r['stockId']) as $i => [$path, $thumb, $fileId]) {
                     $insImg->execute([uuid4(), $id, $path, $thumb, 'drive', $fileId, $i, $now]);
                 }
             } else {
@@ -1215,6 +1227,13 @@ try {
     }
     if ($remote) {
         logln('Limpieza de URLs de Drive: ' . count($remote) . ' revisadas');
+    }
+
+    // Después de insertar Drive o curados: la portada preferida sobrevive al reemplazo
+    // y también a las galerías que photos_locked dejó quietas.
+    $covers = apply_preferred_covers($pdo);
+    if ($covers > 0) {
+        logln('Portadas preferidas actualizadas: ' . $covers);
     }
 
     // Lo que ya no está en la planilla se archiva (no se borra): sale del sitio y queda en el admin.
