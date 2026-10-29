@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/photo_exclusions.php';
+require_once __DIR__ . '/preferred_covers.php';
 
 const STATUSES = ['Disponible', 'En reserva', 'Vendido', 'Borrador'];
 
@@ -28,7 +29,10 @@ function public_vehicle(array $v, ?string $slug = null): array
         $v['description'] = public_blurb($v);
     }
     if (isset($v['vehicle_images']) && is_array($v['vehicle_images'])) {
-        $v['vehicle_images'] = images_without_excluded($v['vehicle_images']);
+        $v['vehicle_images'] = with_preferred_cover(
+            images_without_excluded($v['vehicle_images']),
+            (string) ($v['stock_id'] ?? '')
+        );
     }
     $cover = '';
     if (!empty($v['vehicle_images'][0]['storage_path'])) {

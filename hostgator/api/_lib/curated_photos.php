@@ -4,8 +4,12 @@ declare(strict_types=1);
 /**
  * Fotos curadas de unidades de Salgado, versionadas en el repo (sin Drive).
  * Cada unidad: stock_id => [carpeta opaca, cantidad]. Las imágenes están en
- * api/_lib/curated/<carpeta>/NN.webp (+ NN_t.webp), NN = orden, 01 = portada.
+ * api/_lib/curated/<carpeta>/NN.webp (+ NN_t.webp). NN es el nombre estable del
+ * archivo. Sin override, 01 es la portada. Si preferred_covers.json elige otro
+ * NN de esta carpeta, el sync publica ese archivo primero y corre el resto
+ * (01 queda en su lugar relativo). No renombra ni borra archivos.
  * El sync las copia a uploads/curated/<carpeta>/ y las deja bloqueadas (source=upload).
+ * La portada preferida se reaplica en cada sync aunque photos_locked esté activo.
  * Si la carpeta de una unidad cambia, el sync reemplaza ese set una vez y conserva
  * las fotos que el admin haya subido a mano. No se usan patentes en rutas ni URLs.
  */

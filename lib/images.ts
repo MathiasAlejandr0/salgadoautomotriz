@@ -1,4 +1,5 @@
 import type { VehicleWithImages } from "@/types/database";
+import { withPreferredCover } from "@/lib/preferred-covers";
 
 /** Sin foto real: placeholder propio (nunca una foto de stock que parezca inventario). */
 const FALLBACK = "/placeholder-car.svg";
@@ -18,10 +19,11 @@ function isLocal(path: string | null | undefined): path is string {
 }
 
 function localImages(vehicle: VehicleWithImages) {
-  return (vehicle.vehicle_images ?? [])
-    .slice()
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .filter((img) => isLocal(img.storage_path));
+  // La primera foto local es la portada de la tarjeta y de la ficha.
+  // withPreferredCover mueve la foto elegida a sort_order 0 si ese stock está en el mapa.
+  return withPreferredCover(vehicle.vehicle_images ?? [], vehicle.stock_id).filter((img) =>
+    isLocal(img.storage_path)
+  );
 }
 
 export function resolveVehicleImage(vehicle: VehicleWithImages): string {
