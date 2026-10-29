@@ -4,7 +4,7 @@ import Footer from "@/components/layout/Footer";
 import { WhatsAppFloat } from "@/components/shared/WhatsAppCTA";
 import VehicleDetailLive from "@/components/detail/VehicleDetailLive";
 import JsonLdVehicle from "@/components/seo/JsonLdVehicle";
-import { getVehicleBySlug, getVehicles } from "@/lib/queries";
+import { getDetailStaticVehicles, getVehicleBySlug } from "@/lib/queries";
 import { absoluteUrl, OG_IMAGE } from "@/lib/seo";
 import { resolveVehicleImage } from "@/lib/images";
 import { SITE } from "@/lib/site";
@@ -14,9 +14,12 @@ interface PageProps {
 }
 
 export async function generateStaticParams() {
-  const vehicles = await getVehicles();
-  // "_" es la plantilla que PHP sirve si el auto llegó después de este build.
-  return [...vehicles.map((vehicle) => ({ slug: vehicle.slug })), { slug: "_" }];
+  const vehicles = await getDetailStaticVehicles();
+  const slugs = new Set(vehicles.map((vehicle) => vehicle.slug));
+  // "_" es la plantilla que PHP sirve si el auto llegó después de este build
+  // o si la ficha estática ya no está (auto oculto o vendido).
+  slugs.add("_");
+  return [...slugs].map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

@@ -2,8 +2,14 @@
 # Secrets requeridos (Settings > Secrets and variables > Actions):
 #   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
 # La config con credenciales (salgado-config.php) vive FUERA de public_html y nunca se sube.
-# No se borran archivos del servidor que no estén en el repo: uploads/ está excluido y
-# el action solo elimina lo que él mismo subió antes (estado en .ftp-deploy-sync-state.json).
+# El sync con state file solo borra archivos que ESE action subió antes. Un index.html
+# de un export anterior (o un chunk de /_next que nunca entró al state) se queda y
+# el HTML viejo apunta a un CSS que ya no existe.
+# Por eso /_next y /catalogo se reemplazan enteros (dangerous-clean-slate) en su
+# propia carpeta. NUNCA se limpia public_html completo: el flag ignora `exclude`
+# y borraría uploads/, api/, .htaccess, _cron y secretos.
+# El resto (api/, .htaccess, páginas .html de la raíz) se sube con el state file:
+# no toca uploads/ ni archivos que el action no haya subido.
 name: Deploy HostGator
 
 on:
@@ -18,7 +24,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +46,9 @@ jobs:
             echo "Archivo de config con credenciales en el paquete"; exit 1
           fi
 
+      # api/, .htaccess, vehicle-index.json y las .html de la raíz.
+      # _next y catalogo van en los pasos de abajo: este exclude evita que el
+      # state file de la raíz los borre o los vuelva a mezclar con huérfanos.
       - name: Subir public_html por FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -60,3 +69,38 @@ jobs:
             **/config.php
             **/.env*
             **/error_log
+            _next/**
+            catalogo/**
+
+      # Solo esta carpeta. dangerous-clean-slate aquí no alcanza api/ ni uploads/.
+      - name: Reemplazar _next (borra chunks que ya no están en el build)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: hostgator/dist/salgado-hostgator/public_html/_next/
+          server-dir: public_html/_next/
+          dangerous-clean-slate: true
+          exclude: |
+            **/.git*
+            **/.git*/**
+
+      # Borra fichas que este build ya no genera (p. ej. slug/index.html del 26-10)
+      # y sube las nuevas, incluido el index.html espejo del HTML vigente.
+      - name: Reemplazar catalogo (borra HTML de detalle que ya no está)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: hostgator/dist/salgado-hostgator/public_html/catalogo/
+          server-dir: public_html/catalogo/
+          dangerous-clean-slate: true
+          exclude: |
+            **/.git*
+            **/.git*/**
