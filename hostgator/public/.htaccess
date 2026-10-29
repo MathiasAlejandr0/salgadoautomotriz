@@ -58,7 +58,7 @@ AddDefaultCharset UTF-8
   RewriteRule ^catalogo/detalle/renault-clio-hb-expression-2021-pgfv54$ /catalogo/detalle/renault-clio-hb-expression-gris-titanio-2021-100 [R=301,L]
   RewriteRule ^catalogo/detalle/mg-3-2022-sbry19$ /catalogo/detalle/mg-3-negro-2022-87 [R=301,L]
   RewriteRule ^catalogo/detalle/chery-tiggo-8-2022-rdyd67$ /catalogo/detalle/chery-tiggo-8-blanco-2022-66 [R=301,L]
-  RewriteRule ^catalogo/detalle/great-wall-wingle-5-2020-lpvk81$ /catalogo/detalle/great-wall-wingle-5-blanco-2020-37 [R=301,L]
+  RewriteRule ^catalogo/detalle/great-wall-wingle-5-2020-lpvk81$ /catalogo/detalle/great-wall-wingle-5-blanco-2020-nc0bda0 [R=301,L]
   RewriteRule ^catalogo/detalle/kia-soluto-mpi-14-2024-tdbc99$ /catalogo/detalle/kia-soluto-mpi-14-blanco-2024-263 [R=301,L]
   RewriteRule ^catalogo/detalle/kia-soluto-14-2024-tfwj76$ /catalogo/detalle/kia-soluto-14-plateado-2024-342 [R=301,L]
   RewriteRule ^catalogo/detalle/kia-morning-ex-12-2021-pjzr78$ /catalogo/detalle/kia-morning-ex-12-gris-2021-333 [R=301,L]
@@ -77,29 +77,43 @@ AddDefaultCharset UTF-8
   RewriteRule ^catalogo/detalle/mg-zs-2024-trbx87$ /catalogo/detalle/mg-zs-gris-plata-2024-323 [R=301,L]
   RewriteRule ^catalogo/detalle/mitsubishi-l200-katana-crt-4x4-2019$ /catalogo/detalle/mitsubishi-l200-katana-crt-4x4-rojo-2019-n590ed1 [R=301,L]
   RewriteRule ^catalogo/detalle/nissan-navara-4x2-2023$ /catalogo/detalle/nissan-navara-4x2-gris-2023-n57e0ab [R=301,L]
-  RewriteRule ^catalogo/detalle/ford-ranger-4x4-2023$ /catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a [R=301,L]
+  RewriteRule ^catalogo/detalle/ford-ranger-4x4-2023$ /catalogo/detalle/ford-ranger-4x4-rojo-2023-53 [R=301,L]
   RewriteRule ^catalogo/detalle/kia-morning-2015$ /catalogo/detalle/kia-morning-plateado-2015-14 [R=301,L]
-  RewriteRule ^catalogo/detalle/suzuki-jimny-mt-4x4-15-2023$ /catalogo/detalle/suzuki-jimny-mt-4x4-15-gris-2023-18 [R=301,L]
-  RewriteRule ^catalogo/detalle/toyota-hilux-sr-4x4-2024$ /catalogo/detalle/toyota-hilux-sr-4x4-roja-2024-n009c5e [R=301,L]
-  RewriteRule ^catalogo/detalle/toyota-raize-4x2-12-2025$ /catalogo/detalle/toyota-raize-4x2-12-gris-2025-n19ef1e [R=301,L]
+  RewriteRule ^catalogo/detalle/suzuki-jimny-mt-4x4-15-2023$ /catalogo/detalle/suzuki-jimny-mt-4x4-15-gris-2023-11 [R=301,L]
+  RewriteRule ^catalogo/detalle/toyota-hilux-sr-4x4-2024$ /catalogo/detalle/toyota-hilux-sr-4x4-roja-2024-65 [R=301,L]
+  RewriteRule ^catalogo/detalle/toyota-raize-4x2-12-2025$ /catalogo/detalle/toyota-raize-4x2-12-gris-2025-82 [R=301,L]
   RewriteRule ^catalogo/detalle/nissan-navara-xe-4x4-2023$ /catalogo/detalle/nissan-navara-xe-4x4-blanco-2023-17 [R=301,L]
-  RewriteRule ^catalogo/detalle/hino-xzu-617-dc-2023$ /catalogo/detalle/hino-xzu-617-dc-blanco-2023-23 [R=301,L]
-  RewriteRule ^catalogo/detalle/hyundai-porter-2022$ /catalogo/detalle/hyundai-porter-blanco-2022-24 [R=301,L]
-  RewriteRule ^catalogo/detalle/hyundai-gran-i10-2022$ /catalogo/detalle/hyundai-gran-i10-blanco-2022-35 [R=301,L]
+  RewriteRule ^catalogo/detalle/hino-xzu-617-dc-2023$ /catalogo/detalle/hino-xzu-617-dc-blanco-2023-n644eaf [R=301,L]
+  RewriteRule ^catalogo/detalle/hyundai-porter-2022$ /catalogo/detalle/hyundai-porter-blanco-2022-28 [R=301,L]
+  RewriteRule ^catalogo/detalle/hyundai-gran-i10-2022$ /catalogo/detalle/hyundai-gran-i10-blanco-2022-89 [R=301,L]
   RewriteRule ^catalogo/detalle/nissan-navara-xe-4x2-2024$ /catalogo/detalle/nissan-navara-xe-4x2-roja-2024-1 [R=301,L]
   RewriteRule ^catalogo/detalle/toyota-hilux-sr-4x4-2022$ /catalogo/detalle/toyota-hilux-sr-4x4-rojo-2022-2 [R=301,L]
-  RewriteRule ^catalogo/detalle/toyota-hilux-4x2-2023$ /catalogo/detalle/toyota-hilux-4x2-rojo-2023-3 [R=301,L]
+  RewriteRule ^catalogo/detalle/toyota-hilux-4x2-2023$ /catalogo/detalle/toyota-hilux-4x2-rojo-2023-33 [R=301,L]
   RewriteRule ^catalogo/detalle/chevrolet-colorado-4x4-aut-2022$ /catalogo/detalle/chevrolet-colorado-4x4-aut-blanco-2022-4 [R=301,L]
   RewriteRule ^catalogo/detalle/mg-3-hatch-back-2022$ /catalogo/detalle/mg-3-hatch-back-blanco-2022-6 [R=301,L]
   RewriteRule ^catalogo/detalle/ram-700-2022$ /catalogo/detalle/ram-700-blanco-2022-na4a550 [R=301,L]
   RewriteRule ^catalogo/detalle/peugeot-partner-2022$ /catalogo/detalle/peugeot-partner-blanca-2022-9 [R=301,L]
   RewriteRule ^catalogo/detalle/mitsubishi-l200-katana-crt-4x4-2018$ /catalogo/detalle/mitsubishi-l200-katana-crt-4x4-rojo-2018-naf9d63 [R=301,L]
+  RewriteRule ^catalogo/detalle/hyundai-gran-i10-blanco-2022-35$ /catalogo/detalle/hyundai-gran-i10-blanco-2022-89 [R=301,L]
+  RewriteRule ^catalogo/detalle/toyota-hilux-4x2-rojo-2023-3$ /catalogo/detalle/toyota-hilux-4x2-rojo-2023-33 [R=301,L]
+  RewriteRule ^catalogo/detalle/hyundai-porter-blanco-2022-24$ /catalogo/detalle/hyundai-porter-blanco-2022-28 [R=301,L]
+  RewriteRule ^catalogo/detalle/suzuki-jimny-mt-4x4-15-gris-2023-18$ /catalogo/detalle/suzuki-jimny-mt-4x4-15-gris-2023-11 [R=301,L]
+  RewriteRule ^catalogo/detalle/great-wall-wingle-5-blanco-2020-37$ /catalogo/detalle/great-wall-wingle-5-blanco-2020-nc0bda0 [R=301,L]
+  RewriteRule ^catalogo/detalle/toyota-hilux-sr-4x4-roja-2024-n009c5e$ /catalogo/detalle/toyota-hilux-sr-4x4-roja-2024-65 [R=301,L]
+  RewriteRule ^catalogo/detalle/toyota-raize-4x2-12-gris-2025-n19ef1e$ /catalogo/detalle/toyota-raize-4x2-12-gris-2025-82 [R=301,L]
+  RewriteRule ^catalogo/detalle/ford-ranger-4x4-rojo-2023-n5f603a$ /catalogo/detalle/ford-ranger-4x4-rojo-2023-53 [R=301,L]
+  RewriteRule ^catalogo/detalle/hino-xzu-617-dc-blanco-2023-23$ /catalogo/detalle/hino-xzu-617-dc-blanco-2023-n644eaf [R=301,L]
   # END plate-redirects
 
-  # Ficha: HTML generado. Si no existe, PHP (auto nuevo, 301, 410 o 404).
+  # Ficha vigente: catalogo/detalle/<slug>.html de ESTE build.
+  # Una carpeta vieja <slug>/index.html (export anterior) no debe responder:
+  # su CSS ya no está en /_next. [END] evita que DirectoryIndex la sirva.
+  # Sin el .html de este build, PHP (plantilla _, 301, 410 o 404).
   RewriteCond %{DOCUMENT_ROOT}/catalogo/detalle/$1.html -f
-  RewriteRule ^catalogo/detalle/([a-z0-9-]+)$ catalogo/detalle/$1.html [L]
-  RewriteRule ^catalogo/detalle/([a-z0-9-]+)$ api/index.php [L]
+  RewriteRule ^catalogo/detalle/([a-z0-9-]+)/?$ catalogo/detalle/$1.html [END]
+  RewriteCond %{DOCUMENT_ROOT}/catalogo/detalle/$1.html !-f
+  RewriteRule ^catalogo/detalle/([a-z0-9-]+)/index\.html$ api/index.php [END]
+  RewriteRule ^catalogo/detalle/([a-z0-9-]+)/?$ api/index.php [END]
 
   # URLs limpias: /catalogo -> catalogo.html
   RewriteCond %{REQUEST_FILENAME} !-f
