@@ -39,25 +39,27 @@ export default function VehicleCard({ vehicle, glow = false }: VehicleCardProps)
           {vehicle.brand} {vehicle.model}
         </h3>
         <p className="mb-4 mt-1 text-xs text-white/50">{vehicle.version}</p>
-        <div className="mb-5 grid grid-cols-3 gap-1">
+        <div className="mb-5 flex flex-wrap items-start justify-around gap-x-3 gap-y-2">
           {[
-            { icon: Calendar, text: String(vehicle.year) },
-            { icon: Fuel, text: vehicle.fuel?.slice(0, 3) ?? "—" },
+            { icon: Calendar, text: vehicle.year ? String(vehicle.year) : "" },
+            { icon: Fuel, text: vehicle.fuel?.trim() ?? "" },
             {
               icon: Settings2,
               text:
                 vehicle.transmission === "Automática"
-                  ? "AT"
+                  ? "Automática"
                   : vehicle.transmission === "Manual"
-                    ? "MT"
-                    : "—",
+                    ? "Manual"
+                    : "",
             },
-          ].map(({ icon: Icon, text }, i) => (
-            <div key={i} className="flex flex-col items-center gap-1">
-              <Icon size={14} className="text-brand-accent" />
-              <span className="text-[10px] text-white/70">{text}</span>
-            </div>
-          ))}
+          ]
+            .filter(({ text }) => text !== "")
+            .map(({ icon: Icon, text }) => (
+              <div key={text} className="flex min-w-[64px] flex-col items-center gap-1">
+                <Icon size={14} className="text-brand-accent" />
+                <span className="whitespace-nowrap text-[10px] text-white/70">{text}</span>
+              </div>
+            ))}
         </div>
         <div className="flex items-end justify-between border-t border-white/5 pt-3">
           <p className="text-xl font-black text-white">{formatCLP(vehicle.price)}</p>

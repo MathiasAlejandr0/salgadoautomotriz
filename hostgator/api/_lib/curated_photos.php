@@ -30,6 +30,7 @@ function curated_photos(): array
         'RGGZ96' => ['dir' => '498762800952', 'count' => 10],
         'RHCL44' => ['dir' => '2b6d111bb4e1', 'count' => 9],
         'RKRG58' => ['dir' => '5920717b3370', 'count' => 6],
+        'RPSH27' => ['dir' => '79c2439fb27e', 'count' => 9],
         'RPSH28' => ['dir' => '962e6a596257', 'count' => 9],
         'RRKB78' => ['dir' => '1dc13f690a3b', 'count' => 10],
         'RRYJ47' => ['dir' => '5dc1de8e9d7b', 'count' => 9],
@@ -55,6 +56,7 @@ function curated_photos(): array
         'THLV62' => ['dir' => '292bec044fda', 'count' => 11],
         'THSR65' => ['dir' => 'd183ec270531', 'count' => 12],
         'TSGL82' => ['dir' => 'b9b9a3ec681f', 'count' => 9],
+        'VFRF57' => ['dir' => '421e3b1cc5ec', 'count' => 12],
     ];
 }
 
