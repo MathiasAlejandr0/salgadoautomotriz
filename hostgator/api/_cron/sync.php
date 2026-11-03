@@ -344,6 +344,43 @@ function row_is_unavailable(array $row): bool
     return (bool) preg_match('/\b(VENDIDO|RESERVADO|ENTREGADO)\b/', fold(implode(' ', $row)));
 }
 
+/**
+ * Patentes marcadas VENDIDO/ENTREGADO en una fila de cualquier tabla.
+ * En la planilla el "vendido" a veces solo se anota en la pestaña RG MOTORS
+ * o STOCK TOTAL y no en SALGADO AUTOMOTRIZ; sin esto el auto seguía publicado.
+ */
+function sold_plates_from_rows(array $rows): array
+{
+    $sold = [];
+    foreach ($rows as $row) {
+        if (!preg_match('/\b(VENDIDO|VENDIDA|ENTREGADO|ENTREGADA)\b/', fold(implode(' ', $row)))) {
+            continue;
+        }
+        foreach ($row as $c) {
+            $plate = clean_plate($c);
+            if ($plate !== '') {
+                $sold[$plate] = true;
+                break;
+            }
+        }
+    }
+    return $sold;
+}
+
+/** Lee las pestañas de cfg('sold_tabs'). Si una falla, se registra y se sigue (no aborta el sync). */
+function sold_plates_from_tabs(string $sheetId): array
+{
+    $sold = [];
+    foreach ((array) cfg('sold_tabs', ['RG MOTORS', 'STOCK TOTAL']) as $tab) {
+        try {
+            $sold += sold_plates_from_rows(parse_csv_text(sheet_csv($sheetId, (string) $tab)));
+        } catch (Throwable $e) {
+            logln("Vendidos: no se pudo leer la pestaña {$tab}: " . $e->getMessage());
+        }
+    }
+    return $sold;
+}
+
 function looks_like_date(string $s): bool
 {
     $f = fold($s);
@@ -1017,6 +1054,14 @@ try {
     }
     if (!$rows) {
         throw new RuntimeException('La pestaña no tiene unidades vendibles; no se toca el catálogo');
+    }
+
+    // Vendidos anotados en otras pestañas: no se publican aunque sigan en SALGADO AUTOMOTRIZ.
+    $soldElsewhere = sold_plates_from_tabs($sheet);
+    if ($soldElsewhere) {
+        $before = count($rows);
+        $rows = array_values(array_filter($rows, fn ($r) => !isset($soldElsewhere[$r['plate']])));
+        logln('Vendidos en otras pestañas: ' . implode(', ', array_keys($soldElsewhere)) . ' (' . ($before - count($rows)) . ' fuera)');
     }
 
     $existing = (int) $pdo->query("SELECT COUNT(*) FROM vehicles WHERE source = 'sheet' AND archived_at IS NULL")->fetchColumn();
