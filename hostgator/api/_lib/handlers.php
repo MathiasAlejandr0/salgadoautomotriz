@@ -124,9 +124,85 @@ function redirect_local(string $slug): void
     exit;
 }
 
+/**
+ * Slugs que hoy responden con ficha: el del auto publicado y el que usa el build
+ * estático (prefer_static_slug). Los legacy van aparte: solo redirigen.
+ */
+function live_vehicle_slugs(): array
+{
+    $live = [];
+    $legacy = [];
+    foreach (published_identity() as $item) {
+        $live[$item['slug']] = true;
+        $live[prefer_static_slug($item['row'], $item['slug'])] = true;
+        foreach ($item['legacy'] as $old) {
+            $legacy[strtolower((string) $old)] = true;
+        }
+    }
+    return [$live, $legacy];
+}
+
+/** Slug de un auto archivado (vendido) por su slug o su URL vieja con patente. */
+function archived_slug_matches(string $slug): bool
+{
+    foreach (load_vehicles('v.published = 0') as $v) {
+        $candidates = [strtolower(trim((string) $v['slug']))];
+        $plate = trim((string) ($v['plate'] ?? ''));
+        if ($plate !== '' && is_plate_token($plate)) {
+            $candidates[] = slugify($v['brand'] . ' ' . $v['model'] . ' ' . $v['year'] . ' ' . $plate);
+        }
+        if (in_array($slug, $candidates, true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Ficha de un auto que ya no está: 410 + noindex + link al catálogo. */
+function sold_vehicle_page(): void
+{
+    http_response_code(410);
+    header('Content-Type: text/html; charset=utf-8');
+    header('X-Robots-Tag: noindex');
+    header('Cache-Control: no-cache');
+    echo '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>Este vehículo ya fue vendido | Salgado Automotriz</title><meta name="robots" content="noindex">'
+        . '<style>body{font-family:system-ui,sans-serif;max-width:560px;margin:15vh auto;padding:0 20px;text-align:center;color:#1f2937}'
+        . 'a{display:inline-block;margin-top:16px;padding:12px 22px;border-radius:8px;background:#111827;color:#fff;text-decoration:none}</style>'
+        . '</head><body><h1>Este vehículo ya fue vendido</h1>'
+        . '<p>La unidad ya no está disponible en Salgado Automotriz.</p>'
+        . '<a href="/catalogo">Ver autos disponibles</a></body></html>';
+    exit;
+}
+
 function h_vehicle_document(string $slug): void
 {
     $slug = strtolower($slug);
+    // Fichas vigentes: se sirve el HTML de este build solo si el auto sigue publicado.
+    // Un auto vendido entre deploys deja su .html en el hosting: no debe responder.
+    [$live, $liveLegacy] = live_vehicle_slugs();
+    if (isset($live[$slug])) {
+        $static = dirname(__DIR__, 2) . '/catalogo/detalle/' . $slug . '.html';
+        if (is_file($static)) {
+            http_response_code(200);
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-cache');
+            readfile($static);
+            exit;
+        }
+    } elseif (!isset($liveLegacy[$slug])) {
+        $inBuild = false;
+        foreach (static_vehicle_index() as $entry) {
+            if (is_array($entry) && strtolower((string) ($entry['slug'] ?? '')) === $slug) {
+                $inBuild = true;
+                break;
+            }
+        }
+        if ($inBuild || archived_slug_matches($slug)) {
+            sold_vehicle_page();
+        }
+    }
     $index = static_vehicle_index();
     foreach ($index as $item) {
         if (!is_array($item) || !isset($item['slug'])) {
@@ -184,16 +260,8 @@ function h_vehicle_document(string $slug): void
             redirect_local($item['slug']);
         }
     }
-    $archived = load_vehicles('v.published = 0');
-    foreach ($archived as $v) {
-        $candidates = [strtolower(trim((string) $v['slug']))];
-        $plate = trim((string) ($v['plate'] ?? ''));
-        if ($plate !== '' && is_plate_token($plate)) {
-            $candidates[] = slugify($v['brand'] . ' ' . $v['model'] . ' ' . $v['year'] . ' ' . $plate);
-        }
-        if (in_array($slug, $candidates, true)) {
-            html_status(410, 'Vehículo retirado', 'Este vehículo ya no está publicado. La unidad salió de la planilla de Salgado.');
-        }
+    if (archived_slug_matches($slug)) {
+        sold_vehicle_page();
     }
     html_status(404, 'Página no encontrada', 'Esta dirección no corresponde a un vehículo de Salgado.');
 }

@@ -23,9 +23,12 @@ if ($path !== '/' && str_ends_with($path, '/')) {
 if ($path === '/') {
     $path = '/index.html';
 }
-if (preg_match('#^/catalogo/detalle/([a-z0-9-]+)$#', $path, $m)) {
-    $path = is_file("{$root}/catalogo/detalle/{$m[1]}.html") ? "/catalogo/detalle/{$m[1]}.html" : '/catalogo/detalle/_.html';
-} elseif (!is_file($root . $path) && is_file($root . $path . '.html')) {
+if (preg_match('#^/catalogo/detalle/[a-z0-9-]+(\.html|/index\.html)?$#', $path)) {
+    // Igual que .htaccess: la ficha la decide PHP (publicada, vendida o 404).
+    require $root . '/api/index.php';
+    return true;
+}
+if (!is_file($root . $path) && is_file($root . $path . '.html')) {
     $path .= '.html';
 }
 $file = $root . $path;
