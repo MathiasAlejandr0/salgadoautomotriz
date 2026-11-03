@@ -145,13 +145,11 @@ function live_vehicle_slugs(): array
 /** Slug de un auto archivado (vendido) por su slug o su URL vieja con patente. */
 function archived_slug_matches(string $slug): bool
 {
-    foreach (load_vehicles('v.published = 0') as $v) {
-        $candidates = [strtolower(trim((string) $v['slug']))];
-        $plate = trim((string) ($v['plate'] ?? ''));
-        if ($plate !== '' && is_plate_token($plate)) {
-            $candidates[] = slugify($v['brand'] . ' ' . $v['model'] . ' ' . $v['year'] . ' ' . $plate);
-        }
-        if (in_array($slug, $candidates, true)) {
+    // El slug público lo calcula public_identity (no es el slug crudo de MySQL):
+    // se compara igual que para los publicados, más su slug del build y los legacy.
+    foreach (public_identity(load_vehicles('v.published = 0')) as $item) {
+        if ($item['slug'] === $slug || prefer_static_slug($item['row'], $item['slug']) === $slug
+            || in_array($slug, $item['legacy'], true)) {
             return true;
         }
     }
