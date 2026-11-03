@@ -27,7 +27,7 @@ $vehicleSlug = null;
 // URLs públicas que .htaccess reescribe aquí sin pasar por /api/.
 if ($path === '/sitemap.xml') {
     $route = 'sitemap.xml';
-} elseif (preg_match('#^/catalogo/detalle/([a-z0-9-]+)$#', $path, $vm)) {
+} elseif (preg_match('#^/catalogo/detalle/([a-z0-9-]+)(?:\.html|/index\.html)?$#', $path, $vm)) {
     $vehicleSlug = $vm[1];
 } elseif (preg_match('#^/(google[a-z0-9]{6,40}\.html)$#', $path, $gm)) {
     $route = 'gsc/' . $gm[1];
