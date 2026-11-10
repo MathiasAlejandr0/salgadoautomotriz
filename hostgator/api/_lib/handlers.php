@@ -810,9 +810,8 @@ function h_admin_update_vehicle(string $slug): void
     $sets = implode(', ', array_map(fn ($c) => "{$c} = ?", array_keys($row)));
     db()->prepare("UPDATE vehicles SET {$sets}, updated_at = ? WHERE id = ?")
         ->execute(array_merge(array_values($row), [now_db(), $current['id']]));
-    if (array_key_exists('vehicle_images', $patch)) {
-        replace_images($current['id'], $patch['vehicle_images']);
-    }
+    // Las fotos NO se tocan al editar la ficha: se suben con admin/upload y se ordenan
+    // con admin/vehicles/<slug>/photos. Un PUT con la lista vieja borraba las nuevas.
     json_out(['vehicle' => one_vehicle($current['id'])]);
 }
 
@@ -825,12 +824,14 @@ function h_admin_delete_vehicle(string $slug): void
         json_out(['error' => 'No encontrado'], 404);
     }
     db()->prepare('DELETE FROM vehicles WHERE id = ?')->execute([$id]);
+    // Las fotos subidas no se borran: pasan a la papelera fuera de public_html
+    // para poder recuperarlas (los autos de la planilla vuelven con el sync).
     $dir = uploads_dir() . '/vehicles/' . $id;
     if (is_dir($dir)) {
-        foreach (glob($dir . '/*') ?: [] as $f) {
-            @unlink($f);
+        $trash = rtrim((string) cfg('uploads_trash_dir', dirname(uploads_dir(), 2) . '/salgado-papelera-fotos'), '/\\');
+        if (is_dir($trash) || @mkdir($trash, 0700, true)) {
+            @rename($dir, $trash . '/' . preg_replace('/[^\w-]+/', '', (string) $id) . '-' . gmdate('Ymd-His'));
         }
-        @rmdir($dir);
     }
     json_out(['ok' => true]);
 }
@@ -890,6 +891,8 @@ function h_admin_upload(): void
     if (!$saved) {
         fail(400, 'No se recibió ninguna foto válida');
     }
+    // El placeholder no es una foto: con la primera real subida, esa pasa a ser la portada.
+    db()->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '%placeholder%'")->execute([$vehicleId]);
     // Fotos manuales: el sync de Drive ya no reemplaza las de este auto.
     db()->prepare('UPDATE vehicles SET photos_locked = 1, updated_at = ? WHERE id = ?')->execute([now_db(), $vehicleId]);
     json_out(['vehicle' => one_vehicle((string) $vehicleId), 'saved' => $saved]);

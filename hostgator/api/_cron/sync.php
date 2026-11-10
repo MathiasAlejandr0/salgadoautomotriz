@@ -1121,7 +1121,8 @@ try {
     $insert = $pdo->prepare("INSERT INTO vehicles (id, source, sort_rank, stock_id, plate, slug, brand, model, year, version, category, fuel, transmission, mileage, color, doors, engine, traction, power, price, description, location, origin, status, published, featured, created_at, updated_at)
         VALUES (?, 'sheet', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Disponible', 1, ?, ?, ?)");
     $update = $pdo->prepare("UPDATE vehicles SET sort_rank = ?, stock_id = ?, plate = ?, slug = ?, brand = ?, model = ?, year = ?, version = ?, category = ?, fuel = ?, transmission = ?, mileage = ?, color = ?, doors = ?, engine = ?, traction = ?, power = ?, price = ?, description = ?, location = ?, origin = ?, status = 'Disponible', published = 1, archived_at = NULL, featured = ?, updated_at = ? WHERE id = ?");
-    $delImg = $pdo->prepare('DELETE FROM vehicle_images WHERE vehicle_id = ?');
+    // Nunca borra fotos subidas en el admin (/uploads/vehicles/), aunque el auto no esté bloqueado.
+    $delImg = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE '/uploads/vehicles/%'");
     $insImg = $pdo->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, source, drive_file_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?)');
     $hasUploads = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND (source = 'upload' OR storage_path LIKE '/uploads/vehicles/%')");
     $listImgs = $pdo->prepare('SELECT source, storage_path FROM vehicle_images WHERE vehicle_id = ?');
