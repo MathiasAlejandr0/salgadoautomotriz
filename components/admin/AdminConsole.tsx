@@ -707,8 +707,13 @@ function VehicleModal({
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    // Sin vehicle_images: las fotos se manejan en el Estudio de fotos. Mandar la lista
+    // del momento en que se abrió el formulario borraba las fotos subidas después.
+    const { vehicle_images: _images, image: _image, ...base } = vehicle ?? ({} as Partial<AdminVehicle>);
+    void _images;
+    void _image;
     const payload = {
-      ...vehicle,
+      ...base,
       brand: form.brand,
       model: form.model,
       year: Number(form.year),
@@ -1097,7 +1102,11 @@ function PhotoUpload({ slug, onDone }: { slug: string; onDone: () => void }) {
     try {
       const res = await apiFetch("/api/admin/upload", { method: "POST", body });
       const data = await res.json().catch(() => ({}));
-      setMsg(res.ok ? `${data.saved ?? 0} foto(s) subida(s)` : data.error || "No se pudo subir");
+      setMsg(
+        res.ok
+          ? `${data.saved ?? 0} foto(s) subida(s)`
+          : data.error || (res.status === 413 ? "Las fotos pesan demasiado para el servidor: sube menos a la vez" : `No se pudo subir (error ${res.status})`),
+      );
       if (res.ok) onDone();
     } finally {
       setBusy(false);
