@@ -58,11 +58,13 @@ $expected = [
     '107' => 'drive:1EU6PGWn-ncXntKHrV7t8k4WlTOmFGcSA',
     '323' => 'drive:1l2xfTisqo5-B-bnvlBIM4QlX7ByaYW5L',
     'HVHS94' => 'curated:5cf70ae2f9d5/02',
+    // Subaru Outback 352: en Drive la 1ª foto es el interior; portada = frente 3/4.
+    '352' => 'drive:1xD3GcbMtn9ei0BFGGgx94K-FxSzeJ_Rm',
 ];
 
 $tokens = preferred_cover_tokens();
-check($tokens === $expected, 'el mapa tiene las 25 portadas, con la identidad de la propuesta');
-check(count($tokens) === 25, 'son 25 stocks');
+check($tokens === $expected, 'el mapa tiene las 26 portadas, con la identidad de la propuesta');
+check(count($tokens) === 26, 'son 26 stocks');
 check(preferred_cover_token('999') === null, 'un stock fuera del mapa no tiene portada preferida');
 check(preferred_cover_token('') === null, 'stock vacío no coincide');
 
