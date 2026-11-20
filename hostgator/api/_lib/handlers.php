@@ -47,10 +47,45 @@ function public_vehicle(array $v, ?string $slug = null): array
     return $v;
 }
 
+function vehicle_has_real_photo(array $v): bool
+{
+    foreach ($v['vehicle_images'] ?? [] as $img) {
+        $path = strtolower((string) ($img['storage_path'] ?? ''));
+        if ($path !== '' && !str_contains($path, 'placeholder')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** 200 publicado con foto real, 410 vendido o archivado, 404 oculto (sin foto o no publicado). */
+function detail_status_for_vehicle(bool $published, bool $hasRealPhoto, ?string $archivedAt, string $status): int
+{
+    $archived = ($archivedAt !== null && $archivedAt !== '') || $status === 'Vendido';
+    if ($archived) {
+        return 410;
+    }
+    if ($published && $hasRealPhoto) {
+        return 200;
+    }
+    return 404;
+}
+
 function published_identity(): array
 {
     $list = load_vehicles('v.published = 1', [], "CASE WHEN v.source = 'sheet' THEN v.sort_rank ELSE -1 END ASC, v.created_at DESC");
+    $list = array_values(array_filter($list, 'vehicle_has_real_photo'));
     return public_identity($list);
+}
+
+function vehicle_by_public_slug(string $slug): ?array
+{
+    foreach (public_identity(load_vehicles()) as $item) {
+        if ($item['slug'] === $slug || in_array($slug, $item['legacy'], true)) {
+            return $item['row'];
+        }
+    }
+    return null;
 }
 
 function h_public_vehicles(): void
@@ -190,6 +225,21 @@ function h_vehicle_document(string $slug): void
             exit;
         }
     } elseif (!isset($liveLegacy[$slug])) {
+        $known = vehicle_by_public_slug($slug);
+        if ($known) {
+            $code = detail_status_for_vehicle(
+                (bool) $known['published'],
+                vehicle_has_real_photo($known),
+                isset($known['archived_at']) && $known['archived_at'] !== null ? (string) $known['archived_at'] : null,
+                (string) ($known['status'] ?? '')
+            );
+            if ($code === 410) {
+                sold_vehicle_page();
+            }
+            if ($code !== 200) {
+                html_status(404, 'Página no encontrada', 'Esta dirección no corresponde a un vehículo publicado de Salgado.');
+            }
+        }
         $inBuild = false;
         foreach (static_vehicle_index() as $entry) {
             if (is_array($entry) && strtolower((string) ($entry['slug'] ?? '')) === $slug) {

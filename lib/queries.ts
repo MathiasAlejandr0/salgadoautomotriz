@@ -6,7 +6,7 @@ import { MOCK_VEHICLES } from "@/lib/mock-data";
 import { canUseMockFallback } from "@/lib/env";
 import { applyFilters, catalogFacets, type VehicleFilters } from "@/lib/filters";
 import { fetchPublicApiVehicles } from "@/lib/inventory/public-api";
-import { takePublishedGallery, withPreferredCover } from "@/lib/preferred-covers";
+import { hasLocalGallery, takePublishedGallery, withPreferredCover } from "@/lib/preferred-covers";
 import { branchOf } from "@/lib/branch";
 import { annotateStock, forPublic, type StockUnit } from "@/lib/vehicle-public";
 
@@ -172,11 +172,17 @@ async function loadInventoryRaw(): Promise<VehicleWithImages[]> {
       const next = takePublishedGallery(existing, vehicle);
       existing.stock_id = next.stock_id;
       existing.vehicle_images = next.vehicle_images;
+      if (!hasLocalGallery(vehicle.vehicle_images)) {
+        existing.published = false;
+      } else if (vehicle.published) {
+        existing.published = true;
+      }
       continue;
     }
     // El slug ya es el canónico de la API: no se vuelve a calcular.
     const unit: StockUnit = {
       ...vehicle,
+      published: Boolean(vehicle.published) && hasLocalGallery(vehicle.vehicle_images),
       vehicle_images: withPreferredCover(vehicle.vehicle_images, vehicle.stock_id),
       legacySlugs: [],
       branch: branchOf(vehicle.location),

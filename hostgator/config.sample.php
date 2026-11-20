@@ -17,6 +17,14 @@ return [
     'sheet_id' => '1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc',
     'sheet_tab' => 'SALGADO AUTOMOTRIZ',
     'drive_folder_id' => '1T_FkTaF9rFf97kM14MvdYzJHSYg-WLgo',
+    // Opcional. Con esta clave el índice usa files.list (md5, atajos, HEIC).
+    // Sin ella se usa la vista embebida pública.
+    // 'drive_api_key' => '',
+    // changes.list solo funciona con OAuth (una API key no alcanza). Sin estas
+    // tres claves cada sync reindexa la carpeta completa, una vez por subcarpeta.
+    // 'drive_oauth_client_id' => '',
+    // 'drive_oauth_client_secret' => '',
+    // 'drive_oauth_refresh_token' => '',
 
     // Opcional: carpeta de fotos subidas (por defecto public_html/uploads).
     // 'uploads_dir' => '/home/cpaneluser/public_html/uploads',

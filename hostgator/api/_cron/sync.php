@@ -17,8 +17,14 @@ declare(strict_types=1);
  * Si la foto preferida de un curado no es la 01, se reordena el mapa al publicar.
  * Si la carpeta del mapa cambió, se reemplaza solo ese set; las subidas a mano quedan.
  *
- * cPanel → Cron Jobs (cada 10 min):
- *   /usr/local/bin/php /home/<usuario>/public_html/api/_cron/sync.php >/dev/null 2>&1
+ * Publicación: la planilla manda y, además, hace falta al menos una foto real
+ * (Drive, curada o subida). Sin foto real el auto queda published = 0, sin
+ * placeholder, y el sync siguiente lo publica solo cuando aparezcan fotos.
+ *
+ * El horario del cron NO está en el repo: se configura en cPanel. En hosting
+ * compartido de HostGator el mínimo habitual es cada 15 minutos, no cada 10.
+ *   /usr/local/bin/php /home/<usuario>/public_html/api/_cron/sync.php
+ * Simulación sin MySQL ni escrituras: el mismo comando con --dry-run.
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -32,6 +38,8 @@ require dirname(__DIR__) . '/_lib/media.php';
 require_once dirname(__DIR__) . '/_lib/photo_exclusions.php';
 require_once dirname(__DIR__) . '/_lib/curated_photos.php';
 require_once dirname(__DIR__) . '/_lib/preferred_covers.php';
+require_once dirname(__DIR__) . '/_lib/drive_match.php';
+require_once dirname(__DIR__) . '/_lib/drive_index.php';
 
 const PLACEHOLDER = '/placeholder-car.svg';
 
@@ -631,16 +639,29 @@ function drive_listing_api(string $folderId, string $key): array
     $page = '';
     do {
         $q = rawurlencode("'{$folderId}' in parents and trashed = false");
-        $url = "https://www.googleapis.com/drive/v3/files?q={$q}&pageSize=1000&fields=nextPageToken,files(id,name,mimeType)&key=" . rawurlencode($key)
+        $fields = rawurlencode('nextPageToken,files(id,name,mimeType,parents,md5Checksum,modifiedTime,imageMediaMetadata,shortcutDetails)');
+        $url = "https://www.googleapis.com/drive/v3/files?q={$q}&pageSize=1000&fields={$fields}&key=" . rawurlencode($key)
             . ($page !== '' ? '&pageToken=' . rawurlencode($page) : '');
         $data = json_decode(http_get($url), true);
         if (!is_array($data) || !isset($data['files']) || !is_array($data['files'])) {
             throw new RuntimeException('Drive API: respuesta inesperada');
         }
         foreach ($data['files'] as $f) {
-            if (isset($f['id'], $f['name'])) {
-                $entries[] = ['id' => (string) $f['id'], 'name' => (string) $f['name'], 'folder' => ($f['mimeType'] ?? '') === 'application/vnd.google-apps.folder'];
+            if (!isset($f['id'], $f['name'])) {
+                continue;
             }
+            $mime = (string) ($f['mimeType'] ?? '');
+            $targetMime = (string) ($f['shortcutDetails']['targetMimeType'] ?? '');
+            $entries[] = [
+                'id' => (string) $f['id'],
+                'name' => (string) $f['name'],
+                'folder' => $mime === 'application/vnd.google-apps.folder' || $targetMime === 'application/vnd.google-apps.folder',
+                'mime' => $mime,
+                'md5' => $f['md5Checksum'] ?? null,
+                'modified' => $f['modifiedTime'] ?? null,
+                'image_time' => $f['imageMediaMetadata']['time'] ?? null,
+                'shortcut_target' => $f['shortcutDetails']['targetId'] ?? null,
+            ];
         }
         $page = (string) ($data['nextPageToken'] ?? '');
     } while ($page !== '');
@@ -659,7 +680,14 @@ function drive_listing_embed(string $folderId): array
         if (!preg_match('/id="entry-([A-Za-z0-9_-]+)"/', $chunk, $id) || !preg_match('/class="flip-entry-title">([^<]+)/', $chunk, $name)) {
             continue;
         }
-        $entries[] = ['id' => $id[1], 'name' => trim(html_entity_decode($name[1])), 'folder' => str_contains($chunk, 'aria-label="Folder"')];
+        $shortcut = str_contains($chunk, 'aria-label="Shortcut"') || str_contains($chunk, 'drive-sprite-shortcut');
+        $entries[] = [
+            'id' => $id[1],
+            'name' => trim(html_entity_decode($name[1])),
+            'folder' => str_contains($chunk, 'aria-label="Folder"') || $shortcut,
+            'mime' => $shortcut ? 'application/vnd.google-apps.shortcut' : '',
+            'shortcut_target' => null,
+        ];
     }
     return $entries;
 }
@@ -701,7 +729,7 @@ function photo_files(string $folderId): array
     // "._*" son metadatos de macOS (AppleDouble), no fotos: se omiten.
     $files = array_values(array_filter(
         drive_listing($folderId),
-        fn ($e) => !$e['folder'] && !str_starts_with($e['name'], '._') && preg_match('/\.(jpe?g|png|webp|heic|heif|dng)$/i', $e['name'])
+        fn ($e) => !$e['folder'] && !str_starts_with($e['name'], '._') && preg_match(DRIVE_IMAGE_EXT, $e['name'])
     ));
     usort($files, fn ($a, $b) => strnatcasecmp($a['name'], $b['name']));
     return array_map(fn ($e) => ['id' => $e['id'], 'name' => $e['name']], $files);
@@ -1023,6 +1051,10 @@ if (!salgado_sync_is_entry()) {
     return;
 }
 
+if (in_array('--dry-run', array_map('strval', $_SERVER['argv'] ?? []), true)) {
+    exit(salgado_sync_dry_run());
+}
+
 $lock = fopen(sys_get_temp_dir() . '/salgado-sync.lock', 'c');
 if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) {
     fwrite(STDOUT, "Ya hay un sync corriendo\n");
@@ -1071,26 +1103,41 @@ try {
     }
 
     $folderId = $folderFromSheet ?: google_id(cfg('drive_folder_id'), '1T_FkTaF9rFf97kM14MvdYzJHSYg-WLgo');
-    $driveIndex = ['id' => [], 'plate' => []];
     $driveOk = true;
-    try {
-        $driveIndex = index_drive_folders(drive_listing($folderId));
-        logln('Drive índice: ' . count($driveIndex['id']) . ' carpetas con ID, ' . count($driveIndex['plate']) . ' con patente');
-    } catch (Throwable $e) {
-        $driveOk = false;
-        logln('Drive índice no disponible, se conservan las fotos actuales: ' . $e->getMessage());
-    }
 
     usort($rows, fn ($a, $b) => location_rank($a['location']) <=> location_rank($b['location']));
 
-    // 1) Fotos de Drive por unidad (antes de elegir destacados).
-    // Con ID se usa la carpeta "ID n". Sin ID (listas de abajo) se busca por patente.
-    // No se borra nada en Drive: solo se copian fotos nuevas al hosting.
+    // 1) Fotos: un índice (carpeta a carpeta, o changes.list si hay OAuth) y el
+    // match en memoria. Cada carpeta se lista una sola vez. Sin foto real no se publica.
     $budget = (int) cfg('sync_photo_budget', 150);
+    $photoMatch = ['by_stock' => [], 'log' => [], 'conflicts' => []];
+    if ($driveOk) {
+        try {
+            $indexed = drive_index_for_sync($pdo, $folderId);
+            $photoMatch = match_sheet_photos($rows, $indexed['nodes'], ['skip' => array_keys(curated_photos())]);
+            logln('Índice Drive: ' . count($indexed['nodes']) . ' entradas, modo ' . $indexed['mode']);
+            foreach ($photoMatch['log'] as $line) {
+                logln('Sin emparejar: ' . $line);
+            }
+            foreach ($photoMatch['conflicts'] as $line) {
+                logln('CONFLICTO de fotos (no se usa esa asignación): ' . $line);
+            }
+            if ($photoMatch['conflicts']) {
+                throw new RuntimeException('Hay fotos asignadas a más de un auto; no se reemplazan galerías');
+            }
+        } catch (Throwable $e) {
+            $driveOk = false;
+            $photoMatch = ['by_stock' => [], 'log' => [], 'conflicts' => []];
+            logln('Índice de Drive no disponible, se conservan las fotos actuales: ' . $e->getMessage());
+        }
+    }
     foreach ($rows as &$r) {
-        $label = !empty($r['hasSheetId']) ? $r['stockId'] : $r['plate'];
-        // Unidades con fotos curadas en el repo: no se usa Drive para ellas.
-        $r['photos'] = isset(curated_photos()[$r['stockId']]) ? [] : merged_photo_ids(drive_folders_for_row($driveIndex, $r), $label);
+        if (isset(curated_photos()[$r['stockId']])) {
+            $r['photos'] = [];
+            continue;
+        }
+        $hit = $photoMatch['by_stock'][$r['stockId']] ?? null;
+        $r['photos'] = is_array($hit) ? array_values($hit['file_ids'] ?? []) : [];
     }
     unset($r);
 
@@ -1118,9 +1165,10 @@ try {
 
     $now = now_db();
     $keep = [];
+    $sheetKept = [];
     $insert = $pdo->prepare("INSERT INTO vehicles (id, source, sort_rank, stock_id, plate, slug, brand, model, year, version, category, fuel, transmission, mileage, color, doors, engine, traction, power, price, description, location, origin, status, published, featured, created_at, updated_at)
-        VALUES (?, 'sheet', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Disponible', 1, ?, ?, ?)");
-    $update = $pdo->prepare("UPDATE vehicles SET sort_rank = ?, stock_id = ?, plate = ?, slug = ?, brand = ?, model = ?, year = ?, version = ?, category = ?, fuel = ?, transmission = ?, mileage = ?, color = ?, doors = ?, engine = ?, traction = ?, power = ?, price = ?, description = ?, location = ?, origin = ?, status = 'Disponible', published = 1, archived_at = NULL, featured = ?, updated_at = ? WHERE id = ?");
+        VALUES (?, 'sheet', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Disponible', 0, ?, ?, ?)");
+    $update = $pdo->prepare("UPDATE vehicles SET sort_rank = ?, stock_id = ?, plate = ?, slug = ?, brand = ?, model = ?, year = ?, version = ?, category = ?, fuel = ?, transmission = ?, mileage = ?, color = ?, doors = ?, engine = ?, traction = ?, power = ?, price = ?, description = ?, location = ?, origin = ?, status = 'Disponible', archived_at = NULL, featured = ?, updated_at = ? WHERE id = ?");
     // Nunca borra fotos subidas en el admin (/uploads/vehicles/), aunque el auto no esté bloqueado.
     $delImg = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE '/uploads/vehicles/%'");
     $insImg = $pdo->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, source, drive_file_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?)');
@@ -1226,15 +1274,6 @@ try {
                 foreach (order_drive_image_rows($images, $r['stockId']) as $i => [$path, $thumb, $fileId]) {
                     $insImg->execute([uuid4(), $id, $path, $thumb, 'drive', $fileId, $i, $now]);
                 }
-            } else {
-                $insImg->execute([uuid4(), $id, PLACEHOLDER, null, 'drive', null, 0, $now]);
-            }
-        }
-        // Ocultas hasta tener fotos reales: se publican solas cuando llegan fotos (Drive o admin).
-        if (in_array($r['stockId'], hidden_until_photos(), true)) {
-            $realPhotos->execute([$id]);
-            if ((int) $realPhotos->fetchColumn() === 0) {
-                $pdo->prepare('UPDATE vehicles SET published = 0, featured = 0 WHERE id = ?')->execute([$id]);
             }
         }
         $pdo->commit();
@@ -1242,10 +1281,11 @@ try {
             remove_published_curated_dir($retireCuratedDir);
         }
         $keep[] = $id;
+        $sheetKept[$id] = (string) $r['stockId'];
     }
 
     // Limpieza: URLs remotas de Drive que quedaron de versiones anteriores del sync.
-    // Se intenta copiarlas; si no se puede, se quitan (y si el auto queda sin fotos, placeholder).
+    // Se intenta copiarlas; si no se puede, se quitan. Sin foto real no se inventa un placeholder.
     $remote = $pdo->query("SELECT i.id, i.vehicle_id, i.storage_path FROM vehicle_images i JOIN vehicles v ON v.id = i.vehicle_id WHERE i.storage_path LIKE 'http%'")->fetchAll();
     $fix = $pdo->prepare('UPDATE vehicle_images SET storage_path = ?, thumb_path = ?, drive_file_id = ? WHERE id = ?');
     $drop = $pdo->prepare('DELETE FROM vehicle_images WHERE id = ?');
@@ -1268,7 +1308,7 @@ try {
     foreach (array_keys($touched) as $vid) {
         $empty->execute([$vid]);
         if ((int) $empty->fetchColumn() === 0) {
-            $insImg->execute([uuid4(), $vid, PLACEHOLDER, null, 'drive', null, 0, $now]);
+            logln("Vehículo {$vid} quedó sin fotos tras limpiar URLs de Drive");
         }
     }
     if ($remote) {
@@ -1282,13 +1322,32 @@ try {
         logln('Portadas preferidas actualizadas: ' . $covers);
     }
 
+    // Publicado solo con al menos una foto real. El placeholder no cuenta.
+    // La próxima corrida vuelve a intentar los que siguen sin fotos.
+    $setPub = $pdo->prepare('UPDATE vehicles SET published = ?, featured = ? WHERE id = ? AND source = \'sheet\'');
+    $delPh = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '%placeholder%'");
+    $hiddenNoPhoto = 0;
+    foreach ($sheetKept as $vid => $stockId) {
+        $delPh->execute([$vid]);
+        $realPhotos->execute([$vid]);
+        $real = (int) $realPhotos->fetchColumn();
+        $flag = sheet_publication($real);
+        if ($flag['published'] === 1) {
+            $setPub->execute([1, isset($featured[$stockId]) ? 1 : 0, $vid]);
+        } else {
+            $setPub->execute([0, 0, $vid]);
+            $hiddenNoPhoto++;
+        }
+    }
+    logln('Publicación: ' . (count($sheetKept) - $hiddenNoPhoto) . ' con foto, ' . $hiddenNoPhoto . ' ocultos sin foto real');
+
     // Lo que ya no está en la planilla se archiva (no se borra): sale del sitio y queda en el admin.
     $marks = implode(',', array_fill(0, count($keep), '?'));
     $arch = $pdo->prepare("UPDATE vehicles SET status = 'Vendido', published = 0, featured = 0, archived_at = ?, updated_at = ? WHERE source = 'sheet' AND (archived_at IS NULL OR published = 1) AND id NOT IN ({$marks})");
     $arch->execute(array_merge([$now, $now], $keep));
     $archived = $arch->rowCount();
 
-    $summary = 'ok · ' . count($rows) . " unidades, {$archived} archivadas, fotos {$photoStats['mirrored']} ok / {$photoStats['skipped']} omitidas" . ($driveOk ? '' : ' · Drive sin respuesta');
+    $summary = 'ok · ' . count($rows) . " unidades, {$archived} archivadas, {$hiddenNoPhoto} ocultas sin foto, fotos {$photoStats['mirrored']} ok / {$photoStats['skipped']} omitidas" . ($driveOk ? '' : ' · Drive sin respuesta');
     logln($summary);
     $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 1, vehicles = ?, removed = ?, message = ?, log = ? WHERE id = ?')
         ->execute([now_db(), count($rows), $archived, mb_substr($summary, 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);
