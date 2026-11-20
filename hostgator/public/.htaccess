@@ -82,8 +82,8 @@ AddDefaultCharset UTF-8
   # END plate-redirects
 
   # Fichas de detalle: siempre por PHP. api/index.php sirve el .html de este
-  # build solo si el auto sigue publicado; si se vendió responde 410 "ya fue
-  # vendido" (noindex) aunque su .html viejo siga en el hosting.
+  # build solo si el auto sigue publicado y tiene foto real. Vendido: 410.
+  # En la planilla pero sin foto: 404. El .html viejo no se muestra igual.
   RewriteRule ^catalogo/detalle/([a-z0-9-]+)(\.html|/index\.html|/)?$ api/index.php [END]
 
   # URLs limpias: /catalogo -> catalogo.html

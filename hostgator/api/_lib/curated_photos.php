@@ -59,9 +59,3 @@ function curated_photos(): array
         'VFRF57' => ['dir' => '421e3b1cc5ec', 'count' => 12],
     ];
 }
-
-/** Unidades que se ocultan del sitio mientras no tengan fotos reales (se publican solas al llegar fotos). */
-function hidden_until_photos(): array
-{
-    return ['RPSH75', 'RPSV20', 'RPSH34', 'SRCP22', 'RYYS68'];
-}
