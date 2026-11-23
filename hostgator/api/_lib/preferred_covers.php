@@ -109,20 +109,35 @@ function with_preferred_cover(array $images, string $stockId): array
 {
     $sorted = cover_images_in_order($images);
     $token = preferred_cover_token($stockId);
-    if ($token === null) {
-        return $sorted;
-    }
-    $idx = null;
-    foreach ($sorted as $i => $img) {
-        if (image_matches_cover_token($img, $token)) {
-            $idx = $i;
-            break;
+    if ($token !== null) {
+        foreach ($sorted as $i => $img) {
+            if (image_matches_cover_token($img, $token)) {
+                return promote_cover($sorted, $i);
+            }
         }
     }
-    if ($idx === null) {
+    $best = null;
+    $bestRank = 0;
+    $bestScore = -1.0;
+    foreach ($sorted as $i => $img) {
+        $view = photo_view_of_image($img);
+        $rank = cover_view_rank((string) ($view['view'] ?? ''));
+        $score = (float) ($view['score'] ?? 0);
+        if ($rank > $bestRank || ($rank === $bestRank && $rank > 0 && $score > $bestScore)) {
+            $bestRank = $rank;
+            $bestScore = $score;
+            $best = $i;
+        }
+    }
+    if ($best === null || $bestRank < 1) {
         return $sorted;
     }
-    if ($idx !== 0) {
+    return promote_cover($sorted, $best);
+}
+
+function promote_cover(array $sorted, int $idx): array
+{
+    if ($idx > 0) {
         $chosen = $sorted[$idx];
         array_splice($sorted, $idx, 1);
         array_unshift($sorted, $chosen);
@@ -132,6 +147,76 @@ function with_preferred_cover(array $images, string $stockId): array
     }
     unset($img);
     return $sorted;
+}
+
+/** @return array<string, array{view: string, score: float}> */
+function photo_views(): array
+{
+    static $map = null;
+    static $loaded = null;
+    $file = getenv('SALGADO_PHOTO_VIEWS');
+    if (!is_string($file) || $file === '') {
+        $file = __DIR__ . '/photo_views.json';
+    }
+    if ($map !== null && $loaded === $file) {
+        return $map;
+    }
+    $loaded = $file;
+    $map = [];
+    if (!is_file($file)) {
+        return $map;
+    }
+    $decoded = json_decode((string) file_get_contents($file), true);
+    if (!is_array($decoded)) {
+        return $map;
+    }
+    foreach ($decoded as $id => $row) {
+        if (!is_string($id) || !is_array($row) || !is_string($row['view'] ?? null)) {
+            continue;
+        }
+        $map[$id] = [
+            'view' => $row['view'],
+            'score' => (float) ($row['score'] ?? 0),
+        ];
+    }
+    return $map;
+}
+
+function image_drive_file_id(array $img): string
+{
+    $id = trim((string) ($img['drive_file_id'] ?? ''));
+    if ($id !== '') {
+        return $id;
+    }
+    foreach (['storage_path', 'thumb_path'] as $field) {
+        $path = (string) ($img[$field] ?? '');
+        if (preg_match('~/uploads/drive/([A-Za-z0-9_-]{16,128})(?:_t)?\.(?:webp|jpe?g|png)~i', $path, $m)) {
+            return $m[1];
+        }
+        if (preg_match('~googleusercontent\.com/d/([A-Za-z0-9_-]{16,128})~', $path, $m)) {
+            return $m[1];
+        }
+    }
+    return '';
+}
+
+/** @return array{view: string, score: float}|null */
+function photo_view_of_image(array $img): ?array
+{
+    $id = image_drive_file_id($img);
+    if ($id === '') {
+        return null;
+    }
+    return photo_views()[$id] ?? null;
+}
+
+function cover_view_rank(string $view): int
+{
+    return match ($view) {
+        'front_3q' => 3,
+        'front' => 2,
+        default => 0,
+    };
 }
 
 /**
@@ -215,7 +300,7 @@ function order_curated_pairs(array $pairs, string $stockId): array
  */
 function persist_preferred_cover(PDO $pdo, string $vehicleId, string $stockId): bool
 {
-    if ($vehicleId === '' || preferred_cover_token($stockId) === null) {
+    if ($vehicleId === '') {
         return false;
     }
     $list = $pdo->prepare(
@@ -259,22 +344,16 @@ function persist_preferred_cover(PDO $pdo, string $vehicleId, string $stockId): 
     return true;
 }
 
-/** Reaplica la portada de cada stock del mapa que exista en vehicles. */
+/**
+ * Reaplica la portada de todos los autos. Primero la foto fijada en el mapa;
+ * si no hay, el frente que clasificó photo_views.json. No elige interior ni trasera.
+ */
 function apply_preferred_covers(PDO $pdo): int
 {
-    $find = $pdo->prepare('SELECT id FROM vehicles WHERE stock_id = ? LIMIT 1');
+    $rows = $pdo->query('SELECT id, stock_id FROM vehicles')->fetchAll(PDO::FETCH_ASSOC);
     $changed = 0;
-    foreach (preferred_cover_tokens() as $stockId => $_token) {
-        $stockId = (string) $stockId;
-        if (preferred_cover_token($stockId) === null) {
-            continue;
-        }
-        $find->execute([$stockId]);
-        $vehicleId = $find->fetchColumn();
-        if ($vehicleId === false) {
-            continue;
-        }
-        if (persist_preferred_cover($pdo, (string) $vehicleId, $stockId)) {
+    foreach ($rows as $row) {
+        if (persist_preferred_cover($pdo, (string) $row['id'], (string) ($row['stock_id'] ?? ''))) {
             $changed++;
         }
     }

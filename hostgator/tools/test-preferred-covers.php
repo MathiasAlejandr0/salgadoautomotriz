@@ -131,8 +131,11 @@ $remote = [
 ];
 check(with_preferred_cover($remote, '316')[0]['id'] === 'front', 'también reconoce la URL de Drive del build');
 
-$untouched = with_preferred_cover($rexton, 'no-esta');
-check(array_column($untouched, 'id') === ['dash', 'front', 'rear'], 'sin override no se reordena');
+$plain = [
+    ['id' => 'dash', 'storage_path' => '/uploads/drive/1notaviewnotaviewnotav.webp', 'sort_order' => 0],
+    ['id' => 'other', 'storage_path' => '/uploads/drive/1alsonotaviewnotaview.webp', 'sort_order' => 1],
+];
+check(array_column(with_preferred_cover($plain, 'no-esta'), 'id') === ['dash', 'other'], 'sin etiqueta ni portada no se reordena');
 
 $missing = with_preferred_cover([
     ['id' => 'only', 'storage_path' => '/uploads/drive/1zzzzzzzzzzzzzzzzzzzzz.webp', 'sort_order' => 0],
@@ -260,6 +263,23 @@ check(substr_count($sync, 'apply_preferred_covers(') >= 2, 'el sync reaplica la 
 check(str_contains($sync, 'order_drive_image_rows('), 'el alta de fotos de Drive usa el orden preferido');
 check(str_contains($sync, 'order_curated_pairs('), 'publicar curados reordena el mapa');
 check(str_contains($handlers, 'with_preferred_cover('), 'la API pública devuelve la portada preferida');
+
+$views = tempnam(sys_get_temp_dir(), 'vistas');
+file_put_contents($views, json_encode([
+    '1frontFrontFrontFrontFFFF' => ['view' => 'front_3q', 'score' => 0.8],
+    '1dashDashDashDashDashDDDD' => ['view' => 'interior', 'score' => 0.9],
+    '1rearRearRearRearRearRRRR' => ['view' => 'rear', 'score' => 0.7],
+]));
+putenv('SALGADO_PHOTO_VIEWS=' . $views);
+$labeled = [
+    ['id' => 'dash', 'storage_path' => '/uploads/drive/1dashDashDashDashDashDDDD.webp', 'sort_order' => 0],
+    ['id' => 'rear', 'storage_path' => '/uploads/drive/1rearRearRearRearRearRRRR.webp', 'sort_order' => 1],
+    ['id' => 'front', 'storage_path' => '/uploads/drive/1frontFrontFrontFrontFFFF.webp', 'sort_order' => 2],
+];
+$picked = with_preferred_cover($labeled, 'sin-mapa');
+check(array_column($picked, 'id') === ['front', 'dash', 'rear'], 'sin mapa, el frente clasificado gana al interior y a la trasera');
+putenv('SALGADO_PHOTO_VIEWS');
+@unlink($views);
 
 if ($failed > 0) {
     fwrite(STDERR, "{$failed} pruebas fallaron\n");
