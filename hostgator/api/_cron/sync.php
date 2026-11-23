@@ -1113,7 +1113,9 @@ try {
     $photoMatch = ['by_stock' => [], 'log' => [], 'conflicts' => []];
     if ($driveOk) {
         try {
-            $indexed = drive_index_for_sync($pdo, $folderId);
+            $indexed = drive_index_for_sync($pdo, $folderId, [
+                'prefer' => drive_sheet_prefer($rows),
+            ]);
             $photoMatch = match_sheet_photos($rows, $indexed['nodes'], ['skip' => array_keys(curated_photos())]);
             logln('Índice Drive: ' . count($indexed['nodes']) . ' entradas, modo ' . $indexed['mode']);
             foreach ($photoMatch['log'] as $line) {

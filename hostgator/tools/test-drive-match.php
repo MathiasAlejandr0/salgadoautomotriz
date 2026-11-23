@@ -201,6 +201,24 @@ check(($byParent['img'] ?? '') === 'sc', 'el atajo deja las fotos bajo el nombre
 $shortcutMatch = match_sheet_photos([veh('SBFG83', 'SBFG83', 'Mitsubishi', 'Katana', 2022)], $collected);
 check(ids_of($shortcutMatch, 'SBFG83') === ['img'], 'la patente del atajo recibe la foto del destino');
 
+check(drive_index_listing_cap([]) >= 800, 'el tope por defecto abre toda la carpeta de patentes');
+check(drive_prefer_rank('TTBF40', ['TTBF40']) === 0, 'una carpeta con la patente de la planilla va primero');
+check(drive_prefer_rank('Flyers', ['TTBF40']) === 1, 'Flyers no se adelanta');
+check(drive_prefer_rank('RRYJ47', ['RRYJ22']) === 1, 'RRYJ47 no se confunde con RRYJ22');
+$seenOrder = [];
+$preferLister = static function (string $id) use (&$seenOrder): array {
+    $seenOrder[] = $id;
+    if ($id === 'root') {
+        return [
+            ['id' => 'late', 'name' => 'ZZZZ99', 'folder' => true],
+            ['id' => 'soon', 'name' => 'SBFG83', 'folder' => true],
+        ];
+    }
+    return [['id' => $id . 'f', 'name' => '01.jpg', 'folder' => false]];
+};
+drive_index_collect('root', $preferLister, ['max_listings' => 10, 'prefer' => ['SBFG83']]);
+check(($seenOrder[1] ?? '') === 'soon', 'primero se abre la carpeta de la patente, no la que está antes en el listado');
+
 $stmts = drive_sql_statements((string) file_get_contents(dirname(__DIR__) . '/sql/migr3_drive_index.sql'));
 $joined = implode("\n", $stmts);
 check(count($stmts) === 2, 'la migración son dos CREATE TABLE');

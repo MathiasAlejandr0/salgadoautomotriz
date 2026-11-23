@@ -248,23 +248,78 @@ function drive_state_save(PDO $pdo, ?string $pageToken, string $mode, string $ro
         ->execute([$pageToken, $rootId, $mode, $now]);
 }
 
+/** Cuántas carpetas abre una corrida. 200 no alcanza: la raíz ya pasa de 300 patentes. */
+function drive_index_listing_cap(array $options = []): int
+{
+    if (isset($options['max_listings'])) {
+        return max(1, (int) $options['max_listings']);
+    }
+    $fallback = 800;
+    if (function_exists('cfg')) {
+        return max(1, (int) cfg('drive_index_max_listings', $fallback));
+    }
+    return $fallback;
+}
+
+/** 0 si el nombre trae una patente o un ID de la planilla. Esas carpetas se leen primero. */
+function drive_prefer_rank(string $name, array $prefer): int
+{
+    $compact = drive_compact($name);
+    if ($compact === '') {
+        return 1;
+    }
+    foreach ($prefer as $needle) {
+        $needle = drive_compact((string) $needle);
+        if ($needle !== '' && str_contains($compact, $needle)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/** @param array<int, array<string, mixed>> $rows */
+function drive_sheet_prefer(array $rows): array
+{
+    $out = [];
+    foreach ($rows as $r) {
+        if (!is_array($r)) {
+            continue;
+        }
+        $plate = drive_compact((string) ($r['plate'] ?? ''));
+        if ($plate !== '') {
+            $out[] = $plate;
+        }
+        if (!empty($r['hasSheetId'])) {
+            $out[] = 'ID' . drive_compact((string) ($r['stockId'] ?? ''));
+        }
+    }
+    return array_values(array_unique($out));
+}
+
 /**
- * Un listado por carpeta. Los atajos a carpeta se siguen y sus hijos quedan
- * bajo el nombre del atajo. No vuelve a pedir una carpeta ya vista.
- *
  * @param callable(string): array $listFolder
- * @param array{max_listings?: int, max_depth?: int} $options
+ * @param array{max_listings?: int, max_depth?: int, prefer?: string[]} $options
  * @return array<int, array<string, mixed>>
  */
 function drive_index_collect(string $rootId, callable $listFolder, array $options = []): array
 {
-    $maxListings = (int) ($options['max_listings'] ?? 200);
+    $maxListings = drive_index_listing_cap($options);
     $maxDepth = (int) ($options['max_depth'] ?? 3);
+    $prefer = array_values($options['prefer'] ?? []);
     $nodes = [];
     $seenList = [];
     $listings = 0;
     $queue = [[$rootId, 0, $rootId]];
+    $rootSorted = false;
     while ($queue) {
+        if (!$rootSorted && $listings >= 1) {
+            usort($queue, static function (array $a, array $b) use ($nodes, $prefer): int {
+                $na = (string) ($nodes[$a[0]]['name'] ?? '');
+                $nb = (string) ($nodes[$b[0]]['name'] ?? '');
+                return drive_prefer_rank($na, $prefer) <=> drive_prefer_rank($nb, $prefer);
+            });
+            $rootSorted = true;
+        }
         [$folderId, $depth, $parentId] = array_shift($queue);
         if (isset($seenList[$folderId])) {
             continue;
@@ -315,7 +370,7 @@ function drive_index_collect(string $rootId, callable $listFolder, array $option
 /**
  * @return array{nodes: array<int, array<string, mixed>>, mode: string}
  */
-function drive_index_for_sync(PDO $pdo, string $rootId): array
+function drive_index_for_sync(PDO $pdo, string $rootId, array $options = []): array
 {
     $dbOk = true;
     try {
@@ -327,10 +382,11 @@ function drive_index_for_sync(PDO $pdo, string $rootId): array
         }
     }
 
-    $full = static function () use ($pdo, $rootId, $dbOk): array {
+    $full = static function () use ($pdo, $rootId, $dbOk, $options): array {
         $nodes = drive_index_collect($rootId, 'drive_listing', [
-            'max_listings' => (int) (function_exists('cfg') ? cfg('drive_index_max_listings', 200) : 200),
-            'max_depth' => 3,
+            'max_listings' => drive_index_listing_cap($options),
+            'max_depth' => (int) ($options['max_depth'] ?? 3),
+            'prefer' => $options['prefer'] ?? [],
         ]);
         if ($dbOk) {
             try {
@@ -412,7 +468,10 @@ function salgado_sync_dry_run(): int
     if ($sold) {
         fwrite(STDOUT, 'Vendidos en otras pestañas: ' . count($sold) . "\n");
     }
-    $nodes = drive_index_collect($folderId, 'drive_listing', ['max_listings' => 200, 'max_depth' => 3]);
+    $nodes = drive_index_collect($folderId, 'drive_listing', [
+        'max_depth' => 3,
+        'prefer' => drive_sheet_prefer($rows),
+    ]);
     fwrite(STDOUT, 'Índice: ' . count($nodes) . " entradas (un listado por carpeta, sin changes.list)\n");
     $match = match_sheet_photos($rows, $nodes, ['skip' => array_keys(curated_photos())]);
     $api = [];

@@ -17,6 +17,9 @@ return [
     'sheet_id' => '1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc',
     'sheet_tab' => 'SALGADO AUTOMOTRIZ',
     'drive_folder_id' => '1T_FkTaF9rFf97kM14MvdYzJHSYg-WLgo',
+    // Tope de carpetas que el sync abre por corrida. La raíz ya tiene cientos
+    // de carpetas por patente; 200 dejaba sin fotos a las últimas.
+    // 'drive_index_max_listings' => 800,
     // Opcional. Con esta clave el índice usa files.list (md5, atajos, HEIC).
     // Sin ella se usa la vista embebida pública.
     // 'drive_api_key' => '',
