@@ -448,7 +448,7 @@ function drive_apply_changes(array $nodes, array $changes): array
  */
 function match_sheet_photos(array $vehicles, array $nodes, array $options = []): array
 {
-    $limit = (int) ($options['limit'] ?? 12);
+    $limit = (int) ($options['limit'] ?? 20);
     $skip = array_fill_keys(array_map('strval', $options['skip'] ?? []), true);
     $catalog = drive_match_catalog($vehicles);
     $byId = [];

@@ -742,7 +742,7 @@ function photo_files(string $folderId): array
  * @param array<int, array{id: string, name: string}> $candidates
  * @return string[]
  */
-function merged_photo_ids(array $candidates, string $stockId, int $limit = 12): array
+function merged_photo_ids(array $candidates, string $stockId, int $limit = 20): array
 {
     usort($candidates, fn ($a, $b) => (int) !preg_match('/nueva/i', $a['name']) <=> (int) !preg_match('/nueva/i', $b['name']));
     $ids = [];
@@ -1109,7 +1109,7 @@ try {
 
     // 1) Fotos: un índice (carpeta a carpeta, o changes.list si hay OAuth) y el
     // match en memoria. Cada carpeta se lista una sola vez. Sin foto real no se publica.
-    $budget = (int) cfg('sync_photo_budget', 150);
+    $budget = (int) cfg('sync_photo_budget', 400);
     $photoMatch = ['by_stock' => [], 'log' => [], 'conflicts' => []];
     if ($driveOk) {
         try {

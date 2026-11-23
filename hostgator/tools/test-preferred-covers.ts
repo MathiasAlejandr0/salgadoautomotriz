@@ -60,7 +60,7 @@ function vehicle(stockId: string, images: VehicleImage[], slug = "ssangyong-new-
 }
 
 const map = tokens as Record<string, string>;
-assert.equal(Object.keys(map).length, 25);
+assert.equal(Object.keys(map).length, 23);
 assert.equal(map["316"], `drive:${FRONT}`);
 assert.equal(map.RGBP20, "curated:da4fe0f31548/02");
 assert.equal(map.HVHS94, "curated:5cf70ae2f9d5/02");

@@ -34,35 +34,33 @@ function paths(array $images): array
 
 $expected = [
     'RGBP20' => 'curated:da4fe0f31548/02',
-    '299' => 'drive:1OAy6SP3izB48ViiSGzV3OCE_xnaDefJb',
-    '315' => 'drive:1HvVTOv6tBcsrxjoJNrob41mG3GjCoHV_',
-    '333' => 'drive:1O7dGfqgqJRdR5Z1FKNqVSTF_wC7Tf2DF',
+    'GGDK58' => 'drive:1xD3GcbMtn9ei0BFGGgx94K-FxSzeJ_Rm',
+    'RDPG53' => 'drive:1ftoWDLhwzl7W94v1iiXY9irZO-s9Z77P',
+    'RLCT88' => 'drive:1GH6YYQ1-jptwMHTUpIrrFfsfz2LeUZ8i',
+    'RVWG57' => 'drive:1AHvzff7kl0BygksvIp8na__wSND9A9ot',
+    'SBGW67' => 'drive:1B1oY9vxQ-qpVGcoNxRKEuo2Xibf-EYa0',
+    'SBRY19' => 'drive:1YInp63_wNFnTePxFrZXY5saF7K0CgWe9',
+    'TTVG17' => 'drive:145YLceSeCHbcf9lEO7nbppRc8g38hTOj',
+    'ZRF009' => 'drive:1Pxjmt26C8PCj_Q8dhQ8FJp2jaI2TI4WD',
+    'RZKV76' => 'drive:1OAy6SP3izB48ViiSGzV3OCE_xnaDefJb',
+    'PJZR78' => 'drive:1O7dGfqgqJRdR5Z1FKNqVSTF_wC7Tf2DF',
+    'SPXG35' => 'drive:1khZHcSQi6gSqatotPLre9qhsKHJM5AsB',
     '316' => 'drive:1khZHcSQi6gSqatotPLre9qhsKHJM5AsB',
-    '302' => 'drive:1i6hs6bA5ELFb3OjyiD2AAKWcuEEDEJ5-',
-    '278' => 'drive:1Fqg6mopA01_hPHtGX1BU2h1bVIlirV6u',
-    '217' => 'drive:13SDbPFg8skfDwX3dzJ0no_LRXvxnqwfn',
-    '209' => 'drive:15FXbCLB6EzCOrrnzqZfS4boRmBLfg_OQ',
-    '166' => 'drive:1900bey9XnkzwJiSdcaXvRHosVeUMC7Ar',
-    '139' => 'drive:1UxiULhaXODzFUdRd7fJizASTY6b99QNi',
-    '131' => 'drive:1foZhWBaDCWbXaVUczaXtq-b4nq-p2fLt',
-    '129' => 'drive:10zlLlC9yw61NSyElYTzd8f81XeXqYTDq',
-    '118' => 'drive:1WcVJejrVuiVGwOXouwSk6zTjk1XAuwok',
-    '112' => 'drive:1o-UmRRIFBZpOJQblQdOvJ7i8ZctJHZAv',
-    '108' => 'drive:1FzM0mg4oDey_BlYfsUM4K79ee3WbAj_T',
-    '100' => 'drive:1az3sRBa6baC2xw4DNM8wSQG857IbKFRu',
-    '87' => 'drive:1BCQamxHHH_3mMF06rFKyuNHNRuasFmS6',
-    '66' => 'drive:1TarFG20HU8_VJHtXJ_-aLZ4FT0qHOSFi',
-    '37' => 'drive:1XNF_HH2Ln6xt1Al6VGN-r9vYIxo2wmPo',
-    '262' => 'drive:1Vc_WiIego_ZtzofimIAE2V-5yVxRbiiZ',
-    '231' => 'drive:12d3O-vE1wajuAL1QcMDnISoJhZdMRzS0',
-    '107' => 'drive:1EU6PGWn-ncXntKHrV7t8k4WlTOmFGcSA',
-    '323' => 'drive:1l2xfTisqo5-B-bnvlBIM4QlX7ByaYW5L',
+    'SPWZ24' => 'drive:1i6hs6bA5ELFb3OjyiD2AAKWcuEEDEJ5-',
+    'LYZL55' => 'drive:13SDbPFg8skfDwX3dzJ0no_LRXvxnqwfn',
+    'TTVB57' => 'drive:15FXbCLB6EzCOrrnzqZfS4boRmBLfg_OQ',
+    'SVWP48' => 'drive:1900bey9XnkzwJiSdcaXvRHosVeUMC7Ar',
+    'RDYD67' => 'drive:1TarFG20HU8_VJHtXJ_-aLZ4FT0qHOSFi',
+    'LPVK81' => 'drive:1XNF_HH2Ln6xt1Al6VGN-r9vYIxo2wmPo',
+    'DWJS66' => 'drive:1Vc_WiIego_ZtzofimIAE2V-5yVxRbiiZ',
+    'GHTD24' => 'drive:12d3O-vE1wajuAL1QcMDnISoJhZdMRzS0',
+    'TRBX87' => 'drive:1l2xfTisqo5-B-bnvlBIM4QlX7ByaYW5L',
     'HVHS94' => 'curated:5cf70ae2f9d5/02',
 ];
 
 $tokens = preferred_cover_tokens();
-check($tokens === $expected, 'el mapa tiene las 25 portadas, con la identidad de la propuesta');
-check(count($tokens) === 25, 'son 25 stocks');
+check($tokens === $expected, 'el mapa tiene las portadas, con la identidad de la propuesta');
+check(count($tokens) === 23, 'son 23 stocks');
 check(preferred_cover_token('999') === null, 'un stock fuera del mapa no tiene portada preferida');
 check(preferred_cover_token('') === null, 'stock vacío no coincide');
 

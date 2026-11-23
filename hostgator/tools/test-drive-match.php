@@ -149,11 +149,11 @@ check($pub1['published'] === 1 && $pub1['placeholder'] === false, 'con foto real
 
 $many = [veh('X', 'SBFG83', 'Mitsubishi', 'Katana', 2022)];
 $files = [node('box', 'SBFG83', 'root', true)];
-for ($i = 1; $i <= 13; $i++) {
+for ($i = 1; $i <= 21; $i++) {
     $files[] = node('p' . $i, sprintf('%02d.jpg', $i), 'box', false);
 }
 $limited = match_sheet_photos($many, $files);
-check(count(ids_of($limited, 'X')) === 12, 'a lo más 12 fotos');
+check(count(ids_of($limited, 'X')) === 20, 'a lo más 20 fotos');
 check(ids_of($limited, 'X')[0] === 'p1', 'el orden es el nombre natural');
 
 $bad = [
