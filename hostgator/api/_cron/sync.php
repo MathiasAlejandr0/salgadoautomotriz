@@ -23,20 +23,26 @@ declare(strict_types=1);
  * sin carpeta o sin foto usable se publica igual, y el front muestra
  * /placeholder-car.svg. Lo que ya no está en la pestaña se archiva.
  *
- * El horario del cron NO está en el repo: se configura en cPanel. En hosting
- * compartido de HostGator el mínimo habitual es cada 15 minutos, no cada 10.
+ * El cron de cPanel sigue siendo válido:
  *   /usr/local/bin/php /home/<usuario>/public_html/api/_cron/sync.php
- * Simulación sin MySQL ni escrituras: el mismo comando con --dry-run.
+ * También se puede disparar por HTTP (POST /api/sync con el secreto
+ * sync_cron_secret) desde GitHub Actions, sin entrar a cPanel.
+ * Simulación sin MySQL ni escrituras: el mismo comando CLI con --dry-run.
  */
 
+// Directo por HTTP queda prohibido. El disparo autenticado es POST /api/sync.
 if (PHP_SAPI !== 'cli') {
-    http_response_code(403);
-    exit;
+    $self = realpath(__FILE__);
+    $script = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    if ($self !== false && $script !== false && $self === $script) {
+        http_response_code(403);
+        exit;
+    }
 }
 
-require dirname(__DIR__) . '/_lib/app.php';
-require dirname(__DIR__) . '/_lib/specs.php';
-require dirname(__DIR__) . '/_lib/media.php';
+require_once dirname(__DIR__) . '/_lib/app.php';
+require_once dirname(__DIR__) . '/_lib/specs.php';
+require_once dirname(__DIR__) . '/_lib/media.php';
 require_once dirname(__DIR__) . '/_lib/photo_exclusions.php';
 require_once dirname(__DIR__) . '/_lib/curated_photos.php';
 require_once dirname(__DIR__) . '/_lib/preferred_covers.php';
@@ -1049,18 +1055,36 @@ function salgado_sync_is_entry(): bool
     return $arg !== false && $arg === $self;
 }
 
-if (!salgado_sync_is_entry()) {
-    return;
+function salgado_sync_lock_path(): string
+{
+    return sys_get_temp_dir() . '/salgado-sync.lock';
 }
 
-if (in_array('--dry-run', array_map('strval', $_SERVER['argv'] ?? []), true)) {
-    exit(salgado_sync_dry_run());
+/** True si otra corrida tiene el lock. */
+function salgado_sync_is_running(): bool
+{
+    $fh = @fopen(salgado_sync_lock_path(), 'c');
+    if ($fh === false) {
+        return false;
+    }
+    $busy = !flock($fh, LOCK_EX | LOCK_NB);
+    if (!$busy) {
+        flock($fh, LOCK_UN);
+    }
+    fclose($fh);
+    return $busy;
 }
 
-$lock = fopen(sys_get_temp_dir() . '/salgado-sync.lock', 'c');
+/**
+ * Corrida real (MySQL + Drive). 0 ok, 1 error, 2 ya había una en curso.
+ * El cron de cPanel y el endpoint HTTP llaman a esta función.
+ */
+function salgado_sync_main(): int
+{
+$lock = fopen(salgado_sync_lock_path(), 'c');
 if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) {
     fwrite(STDOUT, "Ya hay un sync corriendo\n");
-    exit(0);
+    return 2;
 }
 
 $pdo = db();
@@ -1316,5 +1340,18 @@ try {
     logln('ERROR: ' . $e->getMessage());
     $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 0, message = ?, log = ? WHERE id = ?')
         ->execute([now_db(), mb_substr($e->getMessage(), 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);
-    exit(1);
+    return 1;
 }
+
+    return 0;
+}
+
+if (!salgado_sync_is_entry()) {
+    return;
+}
+
+if (in_array('--dry-run', array_map('strval', $_SERVER['argv'] ?? []), true)) {
+    exit(salgado_sync_dry_run());
+}
+
+exit(salgado_sync_main());

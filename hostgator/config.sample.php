@@ -32,3 +32,10 @@ return [
     // Opcional: carpeta de fotos subidas (por defecto public_html/uploads).
     // 'uploads_dir' => '/home/cpaneluser/public_html/uploads',
 ];
+
+    // Secreto para disparar el sync por HTTP (POST /api/sync) desde GitHub Actions.
+    // El mismo valor va en el secreto del repo SYNC_CRON_SECRET.
+    // Genera uno largo, de 32 caracteres o más. Nunca lo subas a git.
+    // 'sync_cron_secret' => '',
+    // Fotos nuevas por corrida (el resto se descarga en la siguiente).
+    // 'sync_photo_budget' => 150,

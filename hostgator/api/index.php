@@ -115,6 +115,14 @@ try {
             require_admin();
             h_admin_upsert_review();
             break;
+        case $route === 'sync' && $method === 'POST':
+            require_once __DIR__ . '/_lib/sync_http.php';
+            h_sync_run();
+            break;
+        case $route === 'sync/status' && $method === 'GET':
+            require_once __DIR__ . '/_lib/sync_http.php';
+            h_sync_status();
+            break;
         default:
             json_out(['error' => 'No encontrado'], 404);
     }
