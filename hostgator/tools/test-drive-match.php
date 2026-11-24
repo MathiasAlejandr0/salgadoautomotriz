@@ -37,7 +37,7 @@ function veh(string $stock, string $plate, string $brand, string $model, int $ye
     ];
 }
 
-function node(string $id, string $name, ?string $parent, bool $folder, ?string $md5 = null, ?string $shortcut = null): array
+function node(string $id, string $name, ?string $parent, bool $folder, ?string $md5 = null, ?string $shortcut = null, ?string $modified = null): array
 {
     return [
         'id' => $id,
@@ -46,7 +46,7 @@ function node(string $id, string $name, ?string $parent, bool $folder, ?string $
         'folder' => $folder,
         'mime' => '',
         'md5' => $md5,
-        'modified' => null,
+        'modified' => $modified,
         'image_time' => null,
         'shortcut_target' => $shortcut,
     ];
@@ -109,8 +109,9 @@ $nodes = [
 
 $match = match_sheet_photos($vehicles, $nodes);
 check($match['conflicts'] === [], 'el fixture no asigna una foto al auto equivocado');
-check(ids_of($match, '341') === ['c', 'b', 'a'] || ids_of($match, '341') === ['c', 'a', 'b'], 'ID 341 se queda con sus archivos, nuevas primero');
-check(in_array('c', ids_of($match, '341'), true) && !in_array('c', ids_of($match, 'RPSH27'), true), 'la carpeta nuevas no se va a otro auto');
+check(ids_of($match, '341') === ['b', 'a'] || ids_of($match, '341') === ['a', 'b'], 'ID 341 se queda con la carpeta más completa, no junta las dos');
+check(!in_array('c', ids_of($match, '341'), true), 'la carpeta con menos fotos se descarta');
+check(!in_array('c', ids_of($match, 'RPSH27'), true), 'la carpeta descartada no se va a otro auto');
 check(!in_array('b', ids_of($match, 'RPSH27'), true), 'un archivo llamado RPSH27 dentro de ID 341 no cambia de auto');
 check(ids_of($match, 'RPSH27') === ['d', 'e'], 'RPSH27 toma jpg y HEIC, no el txt ni el AppleDouble');
 check(ids_of($match, 'RPSH63') === [] && ids_of($match, 'RPSH66') === [], 'RPSH63 y RPSH66 no heredan la carpeta RPSH27');
@@ -144,7 +145,7 @@ check($flyerMatch['conflicts'] === [], 'los afiches no generan una asignación c
 
 $pub0 = sheet_publication(0);
 $pub1 = sheet_publication(2);
-check($pub0 === ['published' => 0, 'placeholder' => false], 'sin foto real no se publica ni se inventa placeholder');
+check($pub0 === ['published' => 1, 'placeholder' => true], 'sin foto real se publica con placeholder');
 check($pub1['published'] === 1 && $pub1['placeholder'] === false, 'con foto real se publica');
 
 $many = [veh('X', 'SBFG83', 'Mitsubishi', 'Katana', 2022)];
@@ -231,12 +232,55 @@ $sync = (string) file_get_contents(dirname(__DIR__) . '/api/_cron/sync.php');
 check(!str_contains($sync, 'hidden_until_photos'), 'el sync no llama a la lista manual');
 check(!str_contains($sync, "PLACEHOLDER, null, 'drive'"), 'el sync ya no inserta el placeholder');
 check(str_contains($sync, '--dry-run'), 'hay simulación sin escribir');
-check(str_contains($sync, 'sheet_publication'), 'la publicación depende de las fotos reales');
+check(str_contains($sync, 'sheet_publication'), 'la publicación usa sheet_publication');
+check(!preg_match('/publish_curated_photos\(\s*\$/', $sync), 'el sync ya no aplica el set curado');
+check(str_contains($sync, "storage_path LIKE '/uploads/curated/%'"), 'el sync suelta las referencias a /uploads/curated');
 
 check(detail_status_for_vehicle(true, true, null, 'Disponible') === 200, 'publicado con foto responde 200');
-check(detail_status_for_vehicle(true, false, null, 'Disponible') === 404, 'publicado solo con placeholder responde 404');
-check(detail_status_for_vehicle(false, false, null, 'Disponible') === 404, 'oculto por falta de foto no se anuncia como vendido');
+check(detail_status_for_vehicle(true, false, null, 'Disponible') === 200, 'publicado solo con placeholder responde 200');
+check(detail_status_for_vehicle(false, false, null, 'Disponible') === 404, 'no publicado responde 404');
 check(detail_status_for_vehicle(false, true, '2026-11-19 00:00:00.000', 'Vendido') === 410, 'archivado responde 410');
+
+check(drive_is_ignored_folder('Flyers') && drive_is_ignored_folder('Flyer'), 'Flyers y Flyer se ignoran');
+check(drive_is_ignored_folder('KHFG83_originales_con_patente'), 'originales_con_patente se ignora aunque lleve la patente');
+check(drive_is_ignored_folder('originales con patente'), 'originales con espacios también se ignoran');
+check(!drive_is_ignored_folder('KHFG83') && !drive_is_ignored_folder('ID 250'), 'la carpeta de la patente o del ID no se ignora');
+
+$origVehicles = [veh('KHFG83', 'KHFG83', 'Kia', 'Rio', 2020)];
+$origNodes = [
+    node('kh', 'KHFG83', 'root', true),
+    node('k1', '01.jpg', 'kh', false),
+    node('orig', 'KHFG83_originales_con_patente', 'root', true),
+    node('og1', '02.jpg', 'orig', false),
+    node('og2', '03.jpg', 'orig', false),
+];
+$origMatch = match_sheet_photos($origVehicles, $origNodes);
+check(ids_of($origMatch, 'KHFG83') === ['k1'], 'las originales con patente no entran a la galería');
+
+$dupVehicles = [veh('DUP01', 'SXKK11', 'Chevrolet', 'Sail', 2022)];
+$dupNodes = [
+    node('old', 'SXKK11', 'root', true, null, null, '2024-01-01T00:00:00.000Z'),
+    node('o1', '01.jpg', 'old', false, null, null, '2024-01-01T00:00:00.000Z'),
+    node('o2', '02.jpg', 'old', false, null, null, '2024-01-01T00:00:00.000Z'),
+    node('fresh', 'SXKK11', 'root', true, null, null, '2026-01-01T00:00:00.000Z'),
+    node('n1', '01.jpg', 'fresh', false, null, null, '2026-01-01T00:00:00.000Z'),
+    node('n2', '02.jpg', 'fresh', false, null, null, '2026-01-01T00:00:00.000Z'),
+    node('n3', '03.jpg', 'fresh', false, null, null, '2026-01-01T00:00:00.000Z'),
+];
+$dupMatch = match_sheet_photos($dupVehicles, $dupNodes);
+check(ids_of($dupMatch, 'DUP01') === ['n1', 'n2', 'n3'], 'entre carpetas duplicadas gana la más completa');
+
+$tieVehicles = [veh('TIE01', 'THSR65', 'Chevrolet', 'Sail', 2022)];
+$tieNodes = [
+    node('older', 'THSR65', 'root', true, null, null, '2024-01-01T00:00:00.000Z'),
+    node('t1', '01.jpg', 'older', false, null, null, '2024-01-01T00:00:00.000Z'),
+    node('t2', '02.jpg', 'older', false, null, null, '2024-06-01T00:00:00.000Z'),
+    node('newer', 'THSR65', 'root', true, null, null, '2025-06-01T00:00:00.000Z'),
+    node('u1', '01.jpg', 'newer', false, null, null, '2025-06-01T00:00:00.000Z'),
+    node('u2', '02.jpg', 'newer', false, null, null, '2025-07-01T00:00:00.000Z'),
+];
+$tieMatch = match_sheet_photos($tieVehicles, $tieNodes);
+check(ids_of($tieMatch, 'TIE01') === ['u1', 'u2'], 'si empatan en cantidad, gana la carpeta más nueva');
 check(vehicle_has_real_photo(['vehicle_images' => [['storage_path' => '/placeholder-car.svg']]]) === false, 'el placeholder no es foto real');
 check(vehicle_has_real_photo(['vehicle_images' => [['storage_path' => '/uploads/drive/abc.webp']]]) === true, 'una foto en uploads sí cuenta');
 

@@ -153,7 +153,108 @@ function drive_model_key(string $model): string
 
 function sheet_publication(int $realPhotos): array
 {
-    return ['published' => $realPhotos > 0 ? 1 : 0, 'placeholder' => false];
+    $has = $realPhotos > 0;
+    return ['published' => 1, 'placeholder' => !$has];
+}
+
+/** Flyers y originales con patente visible no entran al catálogo público. */
+function drive_is_ignored_folder(string $name): bool
+{
+    $n = trim($name);
+    if ($n === '') {
+        return false;
+    }
+    if (preg_match('/^flyers?$/i', $n)) {
+        return true;
+    }
+    return preg_match('/originales[_\s-]*con[_\s-]*patente/i', $n) === 1;
+}
+
+/** @param array<string, array<string, mixed>> $byId */
+function drive_node_ignored(array $node, array $byId): bool
+{
+    $cur = $node;
+    $seen = [];
+    $guard = 0;
+    while ($cur && $guard++ < 16) {
+        if (drive_is_ignored_folder((string) ($cur['name'] ?? ''))) {
+            return true;
+        }
+        $id = (string) ($cur['id'] ?? '');
+        if ($id === '' || isset($seen[$id])) {
+            break;
+        }
+        $seen[$id] = true;
+        $pid = (string) ($cur['parent'] ?? '');
+        $cur = $byId[$pid] ?? null;
+    }
+    return false;
+}
+
+/**
+ * Entre varias carpetas de la misma patente (o ID), se queda la más completa;
+ * si empatan en cantidad de fotos, la más nueva.
+ *
+ * @param array<string, array<string, mixed>> $byId
+ * @return array{count: int, modified: string}
+ */
+function drive_folder_quality(string $folderId, array $byId): array
+{
+    $count = 0;
+    $modified = (string) (($byId[$folderId]['modified'] ?? '') ?? '');
+    foreach ($byId as $n) {
+        if ((string) ($n['parent'] ?? '') !== $folderId) {
+            continue;
+        }
+        if (!empty($n['folder']) || !drive_is_vehicle_photo((string) ($n['name'] ?? ''))) {
+            continue;
+        }
+        $count++;
+        $m = (string) ($n['modified'] ?? '');
+        if ($m !== '' && $m > $modified) {
+            $modified = $m;
+        }
+    }
+    return ['count' => $count, 'modified' => $modified];
+}
+
+/**
+ * @param array<string, array<string, mixed>> $byId
+ * @param array<string, array{ids: string[], ambiguous: bool, via: array<string, string>}> $claims
+ * @return array<string, true> ids de carpetas descartadas
+ */
+function drive_discard_duplicate_folders(array $byId, array &$claims): array
+{
+    $groups = [];
+    foreach ($byId as $id => $n) {
+        if (empty($n['folder']) || drive_node_ignored($n, $byId)) {
+            continue;
+        }
+        $claim = $claims[$id] ?? ['ids' => [], 'ambiguous' => false, 'via' => []];
+        if (!empty($claim['ambiguous']) || count($claim['ids']) !== 1) {
+            continue;
+        }
+        $groups[(string) $claim['ids'][0]][] = (string) $id;
+    }
+    $discarded = [];
+    foreach ($groups as $folders) {
+        if (count($folders) < 2) {
+            continue;
+        }
+        usort($folders, static function (string $a, string $b) use ($byId): int {
+            $qa = drive_folder_quality($a, $byId);
+            $qb = drive_folder_quality($b, $byId);
+            if ($qa['count'] !== $qb['count']) {
+                return $qb['count'] <=> $qa['count'];
+            }
+            return $qb['modified'] <=> $qa['modified'];
+        });
+        foreach (array_slice($folders, 1) as $id) {
+            $claims[$id] = ['ids' => [], 'ambiguous' => false, 'via' => []];
+            $discarded[$id] = true;
+        }
+    }
+    return $discarded;
 }
 
 /**
@@ -460,8 +561,13 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
     }
     $claims = [];
     foreach ($byId as $id => $n) {
+        if (drive_node_ignored($n, $byId)) {
+            $claims[$id] = ['ids' => [], 'ambiguous' => false, 'via' => []];
+            continue;
+        }
         $claims[$id] = drive_name_claims((string) $n['name'], $catalog);
     }
+    drive_discard_duplicate_folders($byId, $claims);
 
     $buckets = [];
     $notes = [];
@@ -489,7 +595,7 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
 
     $mixedParents = [];
     foreach ($byId as $folder) {
-        if (empty($folder['folder'])) {
+        if (empty($folder['folder']) || drive_node_ignored($folder, $byId)) {
             continue;
         }
         $folderClaim = $claims[(string) $folder['id']] ?? $emptyClaim;
@@ -519,7 +625,7 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
     }
 
     foreach ($byId as $n) {
-        if (!empty($n['folder']) || !drive_is_vehicle_photo((string) $n['name'])) {
+        if (!empty($n['folder']) || !drive_is_vehicle_photo((string) $n['name']) || drive_node_ignored($n, $byId)) {
             continue;
         }
         $parent = $byId[(string) ($n['parent'] ?? '')] ?? null;
@@ -554,7 +660,7 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
     $hasFiles = static fn ($id): bool => !empty($buckets[(string) $id]);
 
     foreach ($byId as $n) {
-        if (!empty($n['folder'])) {
+        if (!empty($n['folder']) || drive_node_ignored($n, $byId)) {
             continue;
         }
         $vinKey = '';
@@ -590,7 +696,7 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
     }
 
     foreach ($byId as $folder) {
-        if (empty($folder['folder'])) {
+        if (empty($folder['folder']) || drive_node_ignored($folder, $byId)) {
             continue;
         }
         $claim = $claims[(string) $folder['id']] ?? $emptyClaim;
@@ -632,7 +738,7 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
             continue;
         }
         foreach ($byId as $n) {
-            if (!empty($n['folder']) || !drive_is_vehicle_photo((string) $n['name'])) {
+            if (!empty($n['folder']) || !drive_is_vehicle_photo((string) $n['name']) || drive_node_ignored($n, $byId)) {
                 continue;
             }
             if (!drive_under_folder($n, (string) $folder['id'], $byId)) {

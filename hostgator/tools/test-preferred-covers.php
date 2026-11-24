@@ -260,7 +260,8 @@ $sync = (string) file_get_contents(dirname(__DIR__) . '/api/_cron/sync.php');
 $handlers = (string) file_get_contents(dirname(__DIR__) . '/api/_lib/handlers.php');
 check(substr_count($sync, 'apply_preferred_covers(') >= 2, 'el sync reaplica la portada al empezar y al terminar');
 check(str_contains($sync, 'order_drive_image_rows('), 'el alta de fotos de Drive usa el orden preferido');
-check(str_contains($sync, 'order_curated_pairs('), 'publicar curados reordena el mapa');
+check(str_contains($sync, "storage_path LIKE '/uploads/curated/%'"), 'el sync deja de referenciar /uploads/curated');
+check(!preg_match('/publish_curated_photos\(\s*\$/', $sync), 'el sync ya no publica el set curado');
 check(str_contains($handlers, 'with_preferred_cover('), 'la API pública devuelve la portada preferida');
 
 if ($failed > 0) {

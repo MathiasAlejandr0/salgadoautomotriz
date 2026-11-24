@@ -70,7 +70,7 @@ function toVehicle(row: SheetVehicle, photos: string[], now: string): VehicleWit
     location: row.location,
     origin: row.origin,
     status: "Disponible",
-    published: photos.length > 0,
+    published: true,
     featured: false,
     created_at: now,
     updated_at: now,

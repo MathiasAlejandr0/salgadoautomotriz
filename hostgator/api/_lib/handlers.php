@@ -58,14 +58,14 @@ function vehicle_has_real_photo(array $v): bool
     return false;
 }
 
-/** 200 publicado con foto real, 410 vendido o archivado, 404 oculto (sin foto o no publicado). */
+/** 200 publicado (con foto o placeholder), 410 vendido o archivado, 404 no publicado. */
 function detail_status_for_vehicle(bool $published, bool $hasRealPhoto, ?string $archivedAt, string $status): int
 {
     $archived = ($archivedAt !== null && $archivedAt !== '') || $status === 'Vendido';
     if ($archived) {
         return 410;
     }
-    if ($published && $hasRealPhoto) {
+    if ($published) {
         return 200;
     }
     return 404;
@@ -74,7 +74,6 @@ function detail_status_for_vehicle(bool $published, bool $hasRealPhoto, ?string 
 function published_identity(): array
 {
     $list = load_vehicles('v.published = 1', [], "CASE WHEN v.source = 'sheet' THEN v.sort_rank ELSE -1 END ASC, v.created_at DESC");
-    $list = array_values(array_filter($list, 'vehicle_has_real_photo'));
     return public_identity($list);
 }
 
