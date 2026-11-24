@@ -1,0 +1,34 @@
+# Clasifica portadas con CLIP en un runner gratis. No se dispara solo al
+# pushear hostgator (eso desplegaría). Se corre a mano o en cron semanal
+# y deja el auto_covers.json como artefacto para revisarlo y commitearlo.
+name: Elegir portadas
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 11 * * 1'
+jobs:
+  choose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, curl, gd
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar CLIP (CPU)
+        run: pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu && pip install --quiet transformers pillow
+      - name: Recorrer Drive y elegir portadas
+        run: |
+          mkdir -p /tmp/salgado-covers
+          php hostgator/tools/dump-drive-photos.php --out /tmp/salgado-covers/drive-photos.json
+          python3 hostgator/tools/choose-covers.py --photos /tmp/salgado-covers/drive-photos.json --out hostgator/api/_lib/auto_covers.json --report /tmp/salgado-covers/report.json --cache /tmp/salgado-cover-cache
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auto-covers
+          path: |
+            hostgator/api/_lib/auto_covers.json
+            /tmp/salgado-covers/report.json

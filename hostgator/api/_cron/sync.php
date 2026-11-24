@@ -10,16 +10,18 @@ declare(strict_types=1);
  * ni pierde fotos). Solo toca vehículos con source='sheet'; los del admin no.
 
  * Fotos de Drive: se copian a /uploads/drive como WebP + miniatura (GD).
- * Fotos subidas a mano o con orden fijado en el admin (photos_locked) no se reemplazan.
- * La portada preferida (preferred_covers.php) sí se reaplica en cada sync, también
- * con photos_locked: esa foto pasa a sort_order 0 y el resto conserva su orden.
- * Fotos curadas del repo: se publican una vez (source=upload, photos_locked=1).
- * Si la foto preferida de un curado no es la 01, se reordena el mapa al publicar.
- * Si la carpeta del mapa cambió, se reemplaza solo ese set; las subidas a mano quedan.
+ * Solo se usan las de la carpeta FOTOS (por patente, o ID NNN como respaldo).
+ * Se ignoran Flyers y carpetas *_originales_con_patente. Si hay carpetas
+ * duplicadas de la misma unidad, se queda la más completa (o la más nueva).
+ * Fotos subidas a mano (/uploads/vehicles/) o una galería Drive con
+ * photos_locked no se reemplazan. Se dejan de referenciar /uploads/curated
+ * (los archivos en disco no se borran).
+ * La portada preferida (preferred_covers.php) sí se reaplica en cada sync,
+ * también con photos_locked: esa foto pasa a sort_order 0 y el resto conserva su orden.
  *
- * Publicación: la planilla manda y, además, hace falta al menos una foto real
- * (Drive, curada o subida). Sin foto real el auto queda published = 0, sin
- * placeholder, y el sync siguiente lo publica solo cuando aparezcan fotos.
+ * Publicación: la planilla manda. Con foto real se publica con esa galería;
+ * sin carpeta o sin foto usable se publica igual, y el front muestra
+ * /placeholder-car.svg. Lo que ya no está en la pestaña se archiva.
  *
  * El horario del cron NO está en el repo: se configura en cPanel. En hosting
  * compartido de HostGator el mínimo habitual es cada 15 minutos, no cada 10.
@@ -1108,7 +1110,7 @@ try {
     usort($rows, fn ($a, $b) => location_rank($a['location']) <=> location_rank($b['location']));
 
     // 1) Fotos: un índice (carpeta a carpeta, o changes.list si hay OAuth) y el
-    // match en memoria. Cada carpeta se lista una sola vez. Sin foto real no se publica.
+    // match en memoria. Cada carpeta se lista una sola vez. Sin foto se publica con placeholder.
     $budget = (int) cfg('sync_photo_budget', 150);
     $photoMatch = ['by_stock' => [], 'log' => [], 'conflicts' => []];
     if ($driveOk) {
@@ -1116,7 +1118,7 @@ try {
             $indexed = drive_index_for_sync($pdo, $folderId, [
                 'prefer' => drive_sheet_prefer($rows),
             ]);
-            $photoMatch = match_sheet_photos($rows, $indexed['nodes'], ['skip' => array_keys(curated_photos())]);
+            $photoMatch = match_sheet_photos($rows, $indexed['nodes']);
             logln('Índice Drive: ' . count($indexed['nodes']) . ' entradas, modo ' . $indexed['mode']);
             foreach ($photoMatch['log'] as $line) {
                 logln('Sin emparejar: ' . $line);
@@ -1134,10 +1136,6 @@ try {
         }
     }
     foreach ($rows as &$r) {
-        if (isset(curated_photos()[$r['stockId']])) {
-            $r['photos'] = [];
-            continue;
-        }
         $hit = $photoMatch['by_stock'][$r['stockId']] ?? null;
         $r['photos'] = is_array($hit) ? array_values($hit['file_ids'] ?? []) : [];
     }
@@ -1146,7 +1144,7 @@ try {
     $find = $pdo->prepare('SELECT id, source, photos_locked FROM vehicles WHERE id = ? OR stock_id = ? OR plate = ? LIMIT 1');
     $realPhotos = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE '%placeholder%'");
     $hasRealPhotos = function (array $r) use ($find, $realPhotos): bool {
-        if ($r['photos'] || isset(curated_photos()[$r['stockId']])) {
+        if ($r['photos']) {
             return true;
         }
         $find->execute(['sa-' . $r['stockId'], $r['stockId'], $r['plate']]);
@@ -1174,17 +1172,11 @@ try {
     // Nunca borra fotos subidas en el admin (/uploads/vehicles/), aunque el auto no esté bloqueado.
     $delImg = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE '/uploads/vehicles/%'");
     $insImg = $pdo->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, source, drive_file_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?)');
-    $hasUploads = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND (source = 'upload' OR storage_path LIKE '/uploads/vehicles/%')");
-    $listImgs = $pdo->prepare('SELECT source, storage_path FROM vehicle_images WHERE vehicle_id = ?');
-    $delDriveLeftovers = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND source <> 'upload' AND storage_path NOT LIKE '/uploads/vehicles/%'");
-    $delCuratedDir = $pdo->prepare('DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE ?');
-    $restImgs = $pdo->prepare('SELECT id FROM vehicle_images WHERE vehicle_id = ? AND storage_path NOT LIKE ? ORDER BY sort_order ASC, created_at ASC, id ASC');
-    $setImgOrder = $pdo->prepare('UPDATE vehicle_images SET sort_order = ? WHERE id = ? AND vehicle_id = ?');
-    $lockPhotos = $pdo->prepare('UPDATE vehicles SET photos_locked = 1 WHERE id = ?');
+    $hasUploads = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '/uploads/vehicles/%'");
+    $delCuratedRefs = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '/uploads/curated/%'");
     $photoStats = ['mirrored' => 0, 'skipped' => 0];
 
     foreach ($rows as $rank => $r) {
-        $retireCuratedDir = null;
         $id = 'sa-' . $r['stockId'];
         $slug = slugify("{$r['brand']} {$r['model']} {$r['year']} {$r['plate']}");
         $desc = "Patente {$r['plate']}. Ubicación: {$r['location']}. Origen: {$r['origin']}.";
@@ -1205,9 +1197,6 @@ try {
             }
         }
 
-        // Fotos curadas del repo: copia de archivos fuera de la transacción.
-        $curated = publish_curated_photos($r['stockId']);
-
         $pdo->beginTransaction();
         $find->execute([$id, $r['stockId'], $r['plate']]);
         $found = $find->fetch();
@@ -1226,48 +1215,18 @@ try {
         } else {
             $insert->execute(array_merge([$id], $params, [$feat, $now, $now]));
         }
-        // Fotos: Drive manda salvo fotos manuales u orden/portada fijados en el admin.
+        // Fotos: Drive manda salvo fotos manuales del admin (/uploads/vehicles/).
         // Si Drive no responde o no trae fotos válidas, se conservan las actuales.
+        // Se dejan de referenciar /uploads/curated, sin borrar los archivos en disco.
+        $delCuratedRefs->execute([$id]);
         $hasUploads->execute([$id]);
-        $locked = ($found && (int) $found['photos_locked'] === 1) || (int) $hasUploads->fetchColumn() > 0;
+        $manual = (int) $hasUploads->fetchColumn();
+        $realPhotos->execute([$id]);
+        $remaining = (int) $realPhotos->fetchColumn();
+        // Manual o galería Drive que el admin bloqueó: no se pisa. El set curado ya se soltó.
+        $locked = $manual > 0 || ($found && (int) $found['photos_locked'] === 1 && $remaining > 0);
         // Si quedaron fotos pendientes por el tope de descargas, no se reemplaza a medias.
         if ($deferred && $found) {
-            $locked = true;
-        }
-        if ($curated) {
-            // La primera vez reemplazan a Drive. Si la carpeta del mapa cambió respecto a la
-            // guardada en /uploads/curated/<carpeta>/, se reemplaza ese set una sola vez.
-            // Las fotos que el admin subió a mano (otra ruta, source=upload) no se borran.
-            // Con la carpeta ya al día no se vuelve a pisar: quedan source=upload y photos_locked.
-            $curDir = (string) (curated_photos()[$r['stockId']]['dir'] ?? '');
-            $listImgs->execute([$id]);
-            $plan = curated_publish_plan($listImgs->fetchAll(), $curDir);
-            $savedDir = $plan['saved_dir'];
-            $rotating = ($plan['action'] === 'refresh' || $plan['action'] === 'refresh-keep')
-                && is_string($savedDir)
-                && preg_match('/^[a-f0-9]{12}$/', $savedDir) === 1
-                && $savedDir !== $curDir;
-            if ($plan['action'] === 'fresh' || ($plan['action'] === 'refresh' && $rotating)) {
-                $delImg->execute([$id]);
-                insert_curated_set($insImg, $id, $curated, $now);
-                $lockPhotos->execute([$id]);
-                if ($rotating) {
-                    logln("Fotos curadas {$curDir}: reemplaza la carpeta {$savedDir}");
-                    $retireCuratedDir = $savedDir;
-                }
-            } elseif ($plan['action'] === 'refresh-keep' && $rotating) {
-                $delCuratedDir->execute([$id, '/uploads/curated/' . $savedDir . '/%']);
-                $delDriveLeftovers->execute([$id]);
-                insert_curated_set($insImg, $id, $curated, $now);
-                $restImgs->execute([$id, '/uploads/curated/' . $curDir . '/%']);
-                $n = count($curated);
-                foreach ($restImgs->fetchAll() as $row) {
-                    $setImgOrder->execute([$n++, $row['id'], $id]);
-                }
-                $lockPhotos->execute([$id]);
-                logln("Fotos curadas {$curDir}: reemplaza la carpeta {$savedDir} y conserva las subidas a mano");
-                $retireCuratedDir = $savedDir;
-            }
             $locked = true;
         }
         if (!$locked && ($images || !$found)) {
@@ -1279,9 +1238,6 @@ try {
             }
         }
         $pdo->commit();
-        if (is_string($retireCuratedDir)) {
-            remove_published_curated_dir($retireCuratedDir);
-        }
         $keep[] = $id;
         $sheetKept[$id] = (string) $r['stockId'];
     }
@@ -1317,31 +1273,31 @@ try {
         logln('Limpieza de URLs de Drive: ' . count($remote) . ' revisadas');
     }
 
-    // Después de insertar Drive o curados: la portada preferida sobrevive al reemplazo
+    // Después de insertar fotos de Drive: la portada preferida sobrevive al reemplazo
     // y también a las galerías que photos_locked dejó quietas.
     $covers = apply_preferred_covers($pdo);
     if ($covers > 0) {
         logln('Portadas preferidas actualizadas: ' . $covers);
     }
 
-    // Publicado solo con al menos una foto real. El placeholder no cuenta.
-    // La próxima corrida vuelve a intentar los que siguen sin fotos.
+    // Se publica aunque no haya foto: la ficha usa el placeholder del sitio.
+    // No se inserta una fila-placeholder en MySQL (el front ya tiene /placeholder-car.svg).
     $setPub = $pdo->prepare('UPDATE vehicles SET published = ?, featured = ? WHERE id = ? AND source = \'sheet\'');
     $delPh = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '%placeholder%'");
-    $hiddenNoPhoto = 0;
+    $withoutPhoto = 0;
     foreach ($sheetKept as $vid => $stockId) {
         $delPh->execute([$vid]);
         $realPhotos->execute([$vid]);
         $real = (int) $realPhotos->fetchColumn();
         $flag = sheet_publication($real);
-        if ($flag['published'] === 1) {
-            $setPub->execute([1, isset($featured[$stockId]) ? 1 : 0, $vid]);
+        if ($flag['placeholder']) {
+            $withoutPhoto++;
+            $setPub->execute([1, 0, $vid]);
         } else {
-            $setPub->execute([0, 0, $vid]);
-            $hiddenNoPhoto++;
+            $setPub->execute([1, isset($featured[$stockId]) ? 1 : 0, $vid]);
         }
     }
-    logln('Publicación: ' . (count($sheetKept) - $hiddenNoPhoto) . ' con foto, ' . $hiddenNoPhoto . ' ocultos sin foto real');
+    logln('Publicación: ' . (count($sheetKept) - $withoutPhoto) . ' con foto, ' . $withoutPhoto . ' con placeholder (sin carpeta o sin foto usable)');
 
     // Lo que ya no está en la planilla se archiva (no se borra): sale del sitio y queda en el admin.
     $marks = implode(',', array_fill(0, count($keep), '?'));
@@ -1349,7 +1305,7 @@ try {
     $arch->execute(array_merge([$now, $now], $keep));
     $archived = $arch->rowCount();
 
-    $summary = 'ok · ' . count($rows) . " unidades, {$archived} archivadas, {$hiddenNoPhoto} ocultas sin foto, fotos {$photoStats['mirrored']} ok / {$photoStats['skipped']} omitidas" . ($driveOk ? '' : ' · Drive sin respuesta');
+    $summary = 'ok · ' . count($rows) . " unidades, {$archived} archivadas, {$withoutPhoto} con placeholder, fotos {$photoStats['mirrored']} ok / {$photoStats['skipped']} omitidas" . ($driveOk ? '' : ' · Drive sin respuesta');
     logln($summary);
     $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 1, vehicles = ?, removed = ?, message = ?, log = ? WHERE id = ?')
         ->execute([now_db(), count($rows), $archived, mb_substr($summary, 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);

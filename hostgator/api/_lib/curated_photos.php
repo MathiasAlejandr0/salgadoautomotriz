@@ -8,10 +8,10 @@ declare(strict_types=1);
  * archivo. Sin override, 01 es la portada. Si preferred_covers.json elige otro
  * NN de esta carpeta, el sync publica ese archivo primero y corre el resto
  * (01 queda en su lugar relativo). No renombra ni borra archivos.
- * El sync las copia a uploads/curated/<carpeta>/ y las deja bloqueadas (source=upload).
- * La portada preferida se reaplica en cada sync aunque photos_locked esté activo.
- * Si la carpeta de una unidad cambia, el sync reemplaza ese set una vez y conserva
- * las fotos que el admin haya subido a mano. No se usan patentes en rutas ni URLs.
+ * El mapa y los archivos se conservan en el repo, pero el sync ya no los publica
+ * ni los referencia: las fotos públicas salen de Drive (o de la subida manual
+ * del admin). No se borran los archivos de uploads/curated. No se usan patentes
+ * en rutas ni URLs.
  */
 
 /** @return array<string, array{dir: string, count: int}> */

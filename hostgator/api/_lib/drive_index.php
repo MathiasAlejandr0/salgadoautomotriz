@@ -473,7 +473,7 @@ function salgado_sync_dry_run(): int
         'prefer' => drive_sheet_prefer($rows),
     ]);
     fwrite(STDOUT, 'Índice: ' . count($nodes) . " entradas (un listado por carpeta, sin changes.list)\n");
-    $match = match_sheet_photos($rows, $nodes, ['skip' => array_keys(curated_photos())]);
+    $match = match_sheet_photos($rows, $nodes);
     $api = [];
     $apiNote = 'API pública leída';
     try {
@@ -495,27 +495,33 @@ function salgado_sync_dry_run(): int
         $id = (string) $r['stockId'];
         $hit = $match['by_stock'][$id] ?? ['file_ids' => [], 'via' => 'none', 'files' => []];
         $driveN = count($hit['file_ids'] ?? []);
-        $curated = isset(curated_photos()[$id]);
+        $wasCurated = isset(curated_photos()[$id]);
         $apiV = $api[$id] ?? null;
         $apiReal = false;
+        $apiCurated = false;
         if (is_array($apiV)) {
             foreach ($apiV['vehicle_images'] ?? [] as $img) {
                 $p = (string) ($img['storage_path'] ?? '');
+                if (str_contains($p, '/uploads/curated/')) {
+                    $apiCurated = true;
+                }
                 if ($p !== '' && !str_contains($p, 'placeholder')) {
                     $apiReal = true;
-                    break;
                 }
             }
         }
         $locked = is_array($apiV) && !empty($apiV['photos_locked']);
-        if ($curated || $driveN > 0) {
-            $will = true;
-        } elseif ($locked) {
-            $will = $apiReal;
+        // En el próximo sync todas las de la planilla se publican. Sin foto: placeholder.
+        $will = true;
+        if ($driveN > 0) {
+            $reason = (string) $hit['via'];
+        } elseif ($wasCurated || $apiCurated) {
+            $reason = 'pasaría de curada a Drive/placeholder';
+        } elseif ($apiReal) {
+            $reason = 'foto ya en el sitio';
         } else {
-            $will = $apiReal && $driveN === 0;
+            $reason = 'placeholder';
         }
-        $reason = $curated ? 'curada' : ($driveN > 0 ? (string) $hit['via'] : ($apiReal ? 'foto ya en el sitio' : (string) $hit['via']));
         $row = [
             'plate' => (string) $r['plate'],
             'stock' => $id,
@@ -524,7 +530,7 @@ function salgado_sync_dry_run(): int
             'year' => (int) $r['year'],
             'drive' => $driveN,
             'via' => (string) ($hit['via'] ?? 'none'),
-            'curated' => $curated,
+            'curated' => $wasCurated,
             'api_real' => $apiReal,
             'locked' => $locked,
             'publish' => $will,
@@ -547,16 +553,43 @@ function salgado_sync_dry_run(): int
             fwrite(STDOUT, "{$plate}\tno está en la planilla vendible\t-\t0\t-\n");
             continue;
         }
-        $label = $row['publish']
-            ? ($row['drive'] > 0 ? 'con fotos' : ($row['curated'] ? 'con fotos curadas' : 'con fotos ya en el sitio'))
-            : ($row['via'] === 'ambiguous' ? 'ambiguo' : 'sin fotos en el Drive');
+        if ($row['drive'] > 0) {
+            $label = 'con fotos Drive';
+        } elseif ($row['reason'] === 'placeholder') {
+            $label = 'se publica con placeholder';
+        } elseif (str_contains((string) $row['reason'], 'curada')) {
+            $label = 'deja curada; usará Drive o placeholder';
+        } else {
+            $label = (string) $row['reason'];
+        }
         fwrite(STDOUT, "{$plate}\t{$label}\t{$row['via']}\t{$row['drive']}\t{$row['folder']}\n");
     }
     fwrite(STDOUT, "\nQuedarían publicados: " . count($published) . ' de ' . count($rows) . "\n");
-    fwrite(STDOUT, 'Quedarían ocultos: ' . count($hidden) . "\n");
-    if ($hidden) {
-        fwrite(STDOUT, 'Ocultos: ' . implode(', ', $hidden) . "\n");
+    $withDrive = count(array_filter($byPlate, static fn ($r) => $r['drive'] > 0));
+    $withPlaceholder = count($rows) - $withDrive;
+    fwrite(STDOUT, "Con fotos de Drive: {$withDrive}\n");
+    fwrite(STDOUT, "Se publicarían con placeholder: {$withPlaceholder}\n");
+    if ($withPlaceholder) {
+        $ph = [];
+        foreach ($byPlate as $row) {
+            if ($row['drive'] < 1) {
+                $ph[] = $row['plate'];
+            }
+        }
+        fwrite(STDOUT, 'Placeholder: ' . implode(', ', $ph) . "\n");
     }
+    $sheetIds = array_fill_keys(array_map(static fn ($r) => (string) $r['stockId'], $rows), true);
+    $archive = [];
+    foreach ($api as $sid => $v) {
+        if ($sid !== '' && !isset($sheetIds[$sid])) {
+            $archive[] = $sid;
+        }
+    }
+    fwrite(STDOUT, 'Se archivarían (en API y ya no en la pestaña): ' . count($archive) . "\n");
+    if ($archive) {
+        fwrite(STDOUT, 'Archivar: ' . implode(', ', $archive) . "\n");
+    }
+
     $violations = $match['conflicts'];
     fwrite(STDOUT, 'Asignaciones cruzadas: ' . count($violations) . "\n");
     foreach (array_slice($violations, 0, 20) as $line) {

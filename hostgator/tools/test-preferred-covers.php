@@ -260,8 +260,42 @@ $sync = (string) file_get_contents(dirname(__DIR__) . '/api/_cron/sync.php');
 $handlers = (string) file_get_contents(dirname(__DIR__) . '/api/_lib/handlers.php');
 check(substr_count($sync, 'apply_preferred_covers(') >= 2, 'el sync reaplica la portada al empezar y al terminar');
 check(str_contains($sync, 'order_drive_image_rows('), 'el alta de fotos de Drive usa el orden preferido');
-check(str_contains($sync, 'order_curated_pairs('), 'publicar curados reordena el mapa');
+check(str_contains($sync, "storage_path LIKE '/uploads/curated/%'"), 'el sync deja de referenciar /uploads/curated');
+check(!preg_match('/publish_curated_photos\(\s*\$/', $sync), 'el sync ya no publica el set curado');
 check(str_contains($handlers, 'with_preferred_cover('), 'la API pública devuelve la portada preferida');
+
+$autoFile = tempnam(sys_get_temp_dir(), 'auto-covers-');
+file_put_contents($autoFile, json_encode([
+    'AUTO01' => 'drive:1AutoCoverFileId0001xxxxxx',
+    '316' => 'drive:1ShouldNotBeatManual316xxxx',
+], JSON_UNESCAPED_SLASHES));
+putenv('SALGADO_AUTO_COVERS=' . $autoFile);
+check(auto_cover_token('AUTO01') === 'drive:1AutoCoverFileId0001xxxxxx', 'el mapa automático se lee');
+check(cover_token_for_stock('316', true) === preferred_cover_token('316'), 'el mapa manual gana al automático');
+check(cover_token_for_stock('AUTO01', true) === 'drive:1AutoCoverFileId0001xxxxxx', 'sin mapa manual se usa el automático');
+check(cover_token_for_stock('AUTO01', false) === null, 'se puede apagar el automático');
+$autoGallery = [
+    ['id' => 'a', 'storage_path' => '/uploads/drive/other.webp', 'drive_file_id' => 'other', 'sort_order' => 0],
+    ['id' => 'b', 'storage_path' => '/uploads/drive/1AutoCoverFileId0001xxxxxx.webp', 'drive_file_id' => '1AutoCoverFileId0001xxxxxx', 'sort_order' => 1],
+];
+check(with_preferred_cover($autoGallery, 'AUTO01')[0]['id'] === 'b', 'el automático deja esa foto primera');
+check(with_preferred_cover($autoGallery, 'AUTO01', false)[0]['id'] === 'a', 'sin automático el orden no cambia');
+
+$pdo2 = new PDO('sqlite::memory:');
+$pdo2->exec('CREATE TABLE vehicles (id TEXT PRIMARY KEY, stock_id TEXT UNIQUE, photos_locked INTEGER NOT NULL DEFAULT 0)');
+$pdo2->exec('CREATE TABLE vehicle_images (id TEXT PRIMARY KEY, vehicle_id TEXT, storage_path TEXT, thumb_path TEXT, drive_file_id TEXT, sort_order INTEGER, created_at TEXT)');
+$pdo2->exec("INSERT INTO vehicles (id, stock_id, photos_locked) VALUES ('sa-AUTO01', 'AUTO01', 1)");
+$pdo2->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, drive_file_id, sort_order) VALUES (?,?,?,?,?,?)')
+    ->execute(['x0', 'sa-AUTO01', '/uploads/drive/other.webp', null, 'other', 0]);
+$pdo2->prepare('INSERT INTO vehicle_images (id, vehicle_id, storage_path, thumb_path, drive_file_id, sort_order) VALUES (?,?,?,?,?,?)')
+    ->execute(['x1', 'sa-AUTO01', '/uploads/drive/1AutoCoverFileId0001xxxxxx.webp', null, '1AutoCoverFileId0001xxxxxx', 1]);
+check(apply_preferred_covers($pdo2) === 0, 'el automático no pisa una galería photos_locked');
+$pdo2->exec("UPDATE vehicles SET photos_locked = 0 WHERE id = 'sa-AUTO01'");
+check(apply_preferred_covers($pdo2) === 1, 'el automático sí se aplica si no está bloqueada');
+$gotAuto = $pdo2->query("SELECT id FROM vehicle_images WHERE vehicle_id = 'sa-AUTO01' ORDER BY sort_order ASC")->fetchAll(PDO::FETCH_COLUMN);
+check($gotAuto === ['x1', 'x0'], 'con el automático la portada queda primera');
+@unlink($autoFile);
+putenv('SALGADO_AUTO_COVERS');
 
 if ($failed > 0) {
     fwrite(STDERR, "{$failed} pruebas fallaron\n");
