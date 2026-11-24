@@ -30,6 +30,7 @@ from PIL import Image
 from transformers import CLIPModel, CLIPProcessor
 
 ROOT = Path(__file__).resolve().parents[2]
+REF_PATH = Path(__file__).resolve().parent / "cover-refs/frente-34-derecha.png"
 MANUAL_PATH = ROOT / "hostgator/api/_lib/preferred_covers.json"
 DEFAULT_OUT = ROOT / "hostgator/api/_lib/auto_covers.json"
 REF_DIR = ROOT / "hostgator/tools/cover-refs"
@@ -255,16 +256,19 @@ def assign_class(scores: dict[str, float], name: str = "") -> str:
     if side >= headlights + 0.03 and side >= frontish + 0.02:
         return "side"
     # Ángulo de portada entre las frontales.
+    # CLIP invierte izq/der respecto de la foto: el grupo "left" es el de la
+    # referencia de Mathias (auto hacia la derecha de la imagen, costado
+    # izquierdo visible). Las clases front_34_* siguen el sentido de la FOTO.
     right, left, straight = scores["right"], scores["left"], scores["front"]
-    if right >= left + 0.004 and right >= straight - 0.01:
-        return "front_34_right"
     if left >= right + 0.004 and left >= straight - 0.01:
+        return "front_34_right"
+    if right >= left + 0.004 and right >= straight - 0.01:
         return "front_34_left"
     if straight >= max(right, left) + 0.004:
         return "front"
-    # Empate: el 3/4 a la derecha es el preferido de Mathias.
+    # Empate: preferir la orientación de la referencia (grupo CLIP "left").
     if max(right, left) >= straight - 0.01:
-        return "front_34_right" if right >= left else "front_34_left"
+        return "front_34_right" if left >= right else "front_34_left"
     return "front"
 
 
@@ -274,12 +278,16 @@ PRIORITY = ["front_34_right", "front_34_left", "front", "exterior", "rear", "int
 
 def cover_quality(photo: dict) -> float:
     s = photo.get("scores") or {}
-    # Ligera preferencia por el 3/4 a la derecha que pidió Mathias.
+    # Ligera preferencia por la orientación de la referencia (CLIP "left").
     # Suma contraste frente/trasera para no preferir un 3/4 trasero mal etiquetado.
-    angle = max(s.get("right", -1.0) + 0.006, s.get("left", -1.0), s.get("front", -1.0))
+    angle = max(s.get("left", -1.0) + 0.006, s.get("right", -1.0), s.get("front", -1.0))
     contrast = s.get("front", 0.0) - s.get("rear", 0.0)
     lights = s.get("headlights", s.get("front", 0.0)) - s.get("taillight", s.get("rear", 0.0))
-    return angle + 0.6 * contrast + 0.35 * lights
+    q = angle + 0.6 * contrast + 0.35 * lights
+    # Solo como desempate entre fotos ya clasificadas como frontales (nunca contra interior/trasera).
+    if photo.get("ref_sim") is not None:
+        q += 0.3 * float(photo["ref_sim"])
+    return q
 
 
 def is_three_quarter_front(photo: dict) -> bool:
@@ -338,6 +346,7 @@ def main() -> int:
     parser.add_argument("--report", default="")
     parser.add_argument("--cache", default="")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--ref", default=str(REF_PATH), help="Foto de referencia 3/4 a la derecha")
     args = parser.parse_args()
 
     photos_path = Path(args.photos)
@@ -352,6 +361,16 @@ def main() -> int:
     print(f"Cargando {MODEL_ID} en {device}…", file=sys.stderr)
     model, processor = build_model(device)
     labels, text_emb = group_text_embeds(model, processor, device)
+
+    ref_embed = None
+    ref_path = Path(args.ref) if args.ref else REF_PATH
+    if ref_path.is_file():
+        ref_img = open_image(ref_path)
+        if ref_img is not None:
+            ref_embed = image_embeds_batch(model, processor, device, [ref_img])
+            print(f"referencia {ref_path}", file=sys.stderr)
+    else:
+        print(f"sin foto de referencia ({ref_path})", file=sys.stderr)
 
     api = fetch_api()
     manual = manual_tokens()
@@ -385,11 +404,15 @@ def main() -> int:
         emb_i += 1
         scores = group_scores(labels, text_emb, emb)
         cls = assign_class(scores, f.get("name") or "")
+        ref_sim = None
+        if ref_embed is not None:
+            ref_sim = round(float((emb @ ref_embed.T).squeeze()), 4)
         by_stock.setdefault(stock, []).append({
             "id": f["id"],
             "name": f.get("name") or "",
             "cls": cls,
             "scores": {k: round(v, 4) for k, v in scores.items()},
+            "ref_sim": ref_sim,
             "ok": True,
         })
 
@@ -419,6 +442,7 @@ def main() -> int:
                 "name": chosen["name"],
                 "cls": chosen["cls"],
                 "scores": chosen["scores"],
+                "ref_sim": chosen.get("ref_sim"),
             },
             "current_first": None if not current else {
                 "path": current.get("path"),
