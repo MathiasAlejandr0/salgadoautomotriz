@@ -186,6 +186,18 @@ function with_preferred_cover(array $images, string $stockId, bool $allowAuto = 
             break;
         }
     }
+    // Si el mapa manual apuntaba a una galería curada y ya usa Drive, cae al automático.
+    if ($idx === null && $allowAuto) {
+        $auto = auto_cover_token($stockId);
+        if ($auto !== null && $auto !== $token) {
+            foreach ($sorted as $i => $img) {
+                if (image_matches_cover_token($img, $auto)) {
+                    $idx = $i;
+                    break;
+                }
+            }
+        }
+    }
     if ($idx === null) {
         return $sorted;
     }

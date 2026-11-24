@@ -32,3 +32,10 @@ return [
     // Opcional: carpeta de fotos subidas (por defecto public_html/uploads).
     // 'uploads_dir' => '/home/cpaneluser/public_html/uploads',
 ];
+
+    // Opcional: el deploy ya sube el hash SHA-256 de SYNC_CRON_SECRET a api/_lib/sync-secret.sha256.
+    // Puedes dejar esto vacío si usas ese secreto en GitHub Actions.
+    // Genera uno largo, de 32 caracteres o más. Nunca lo subas a git.
+    // 'sync_cron_secret' => '',
+    // Fotos nuevas por corrida (el resto se descarga en la siguiente).
+    // 'sync_photo_budget' => 400,

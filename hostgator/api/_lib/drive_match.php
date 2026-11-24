@@ -764,6 +764,9 @@ function match_sheet_photos(array $vehicles, array $nodes, array $options = []):
         $seenMd5 = [];
         $ordered = [];
         foreach ($files as $file) {
+            if (function_exists('is_photo_excluded') && is_photo_excluded($file['id'] ?? null)) {
+                continue;
+            }
             $md5 = $file['md5'] ?? null;
             if (is_string($md5) && $md5 !== '') {
                 if (isset($seenMd5[$md5])) {

@@ -89,7 +89,10 @@ export function withPreferredCover<T extends CoverImage>(
     .map((row) => row.img);
   const token = preferredCoverToken(stockId);
   if (!token) return sorted;
-  const idx = sorted.findIndex((img) => imageMatchesCoverToken(img, token));
+  let idx = sorted.findIndex((img) => imageMatchesCoverToken(img, token));
+  if (idx < 0 && stockId && validToken(AUTO[stockId]) && AUTO[stockId] !== token) {
+    idx = sorted.findIndex((img) => imageMatchesCoverToken(img, AUTO[stockId]));
+  }
   if (idx < 0) return sorted;
   const next = idx === 0 ? sorted.slice() : [sorted[idx], ...sorted.slice(0, idx), ...sorted.slice(idx + 1)];
   return next.map((img, sort_order) => ({ ...img, sort_order }));

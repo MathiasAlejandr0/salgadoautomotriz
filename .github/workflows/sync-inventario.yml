@@ -1,0 +1,130 @@
+# Dispara el sync de planilla + Drive en el hosting, sin cron de cPanel.
+# Corre cada 2 horas y también a mano (Actions > Sync inventario > Run workflow).
+# Secretos (Settings > Secrets and variables > Actions):
+#   SYNC_CRON_SECRET — el deploy sube su hash SHA-256 a api/_lib/sync-secret.sha256
+#   (también puede ir como sync_cron_secret en salgado-config.php).
+# No imprime el secreto.
+name: Sync inventario
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+concurrency:
+  group: sync-inventario
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Disparar y esperar el sync
+        env:
+          SYNC_CRON_SECRET: ${{ secrets.SYNC_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          BASE="https://salgadoautomotriz.cl"
+          if [ -z "${SYNC_CRON_SECRET:-}" ]; then
+            echo "Falta el secreto SYNC_CRON_SECRET en el repo."
+            echo "Cárgalo en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          post() {
+            curl -sS -o /tmp/sync-post.json -w "%{http_code}" \
+              --connect-timeout 20 --max-time 90 \
+              -X POST \
+              -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
+              -H "Accept: application/json" \
+              "$BASE/api/sync"
+          }
+          code=""
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            echo "Intento $attempt de POST /api/sync"
+            set +e
+            code=$(post)
+            curl_ok=$?
+            set -e
+            if [ "$curl_ok" -eq 0 ]; then
+              break
+            fi
+            echo "Error de red (curl $curl_ok), reintento en 8s"
+            attempt=$((attempt + 1))
+            sleep 8
+          done
+          if [ -z "$code" ]; then
+            echo "No se pudo contactar $BASE/api/sync"
+            exit 1
+          fi
+          echo "HTTP $code"
+          python3 - <<'PY'
+          import json,sys
+          try:
+              data=json.load(open("/tmp/sync-post.json"))
+          except Exception:
+              print("Respuesta no JSON")
+              sys.exit(0)
+          for k in ("ok","accepted","mode","full","message","error"):
+              if k in data:
+                  print(f"{k}: {data[k]}")
+          PY
+          if [ "$code" = "503" ]; then
+            echo "El servidor aún no tiene el secreto de sync (ni hash desplegado ni salgado-config.php)."
+            exit 1
+          fi
+          if [ "$code" = "401" ]; then
+            echo "El secreto de GitHub no coincide con el del servidor."
+            exit 1
+          fi
+          if [ "$code" = "404" ]; then
+            echo "El endpoint aún no está en el hosting. Hay que mergear el PR a hostgator y esperar el deploy."
+            exit 1
+          fi
+          if [ "$code" != "202" ] && [ "$code" != "409" ]; then
+            echo "Respuesta inesperada"
+            exit 1
+          fi
+          for i in $(seq 1 40); do
+            sleep 15
+            set +e
+            scode=$(curl -sS -o /tmp/sync-status.json -w "%{http_code}" \
+              --connect-timeout 20 --max-time 30 \
+              -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
+              -H "Accept: application/json" \
+              "$BASE/api/sync/status")
+            set -e
+            if [ "$scode" != "200" ]; then
+              echo "status HTTP $scode, se reintenta"
+              continue
+            fi
+            python3 - <<'PY'
+          import json,sys
+          d=json.load(open("/tmp/sync-status.json"))
+          run=d.get("last_run") or {}
+          print("running={0} ok={1} finished={2} pub={3} sin_carpeta={4} bloqueados={5} incompletos={6} msg={7}".format(
+              d.get("running"), run.get("ok"), run.get("finished_at"),
+              d.get("published"), d.get("missing_drive_folder_count"),
+              d.get("locked_count"), d.get("incomplete_count"), run.get("message")))
+          if d.get("running"):
+              sys.exit(2)
+          if run.get("finished_at") and run.get("ok") is False:
+              sys.exit(3)
+          if run.get("finished_at"):
+              sin=[x.get("stock_id") for x in d.get("missing_drive_folder") or []]
+              inc=[f"{x.get('stock_id')}({x.get('photos')}/{x.get('drive_photos')})" for x in d.get("incomplete_galleries") or []]
+              if sin: print("Sin carpeta Drive:", ", ".join(sin))
+              if inc: print("Incompletos:", ", ".join(inc))
+              sys.exit(0)
+          sys.exit(2)
+          PY
+            st=$?
+            if [ "$st" -eq 0 ]; then
+              echo "Sync terminó bien"
+              exit 0
+            fi
+            if [ "$st" -eq 3 ]; then
+              echo "El sync terminó con error (ver last_run.message)"
+              exit 1
+            fi
+          done
+          echo "El sync sigue en curso tras la espera; revisar GET /api/sync/status"
+          exit 1

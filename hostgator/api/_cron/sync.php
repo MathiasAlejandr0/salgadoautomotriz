@@ -23,20 +23,26 @@ declare(strict_types=1);
  * sin carpeta o sin foto usable se publica igual, y el front muestra
  * /placeholder-car.svg. Lo que ya no está en la pestaña se archiva.
  *
- * El horario del cron NO está en el repo: se configura en cPanel. En hosting
- * compartido de HostGator el mínimo habitual es cada 15 minutos, no cada 10.
+ * El cron de cPanel sigue siendo válido:
  *   /usr/local/bin/php /home/<usuario>/public_html/api/_cron/sync.php
- * Simulación sin MySQL ni escrituras: el mismo comando con --dry-run.
+ * También se puede disparar por HTTP (POST /api/sync con el secreto
+ * sync_cron_secret) desde GitHub Actions, sin entrar a cPanel.
+ * Simulación sin MySQL ni escrituras: el mismo comando CLI con --dry-run.
  */
 
+// Directo por HTTP queda prohibido. El disparo autenticado es POST /api/sync.
 if (PHP_SAPI !== 'cli') {
-    http_response_code(403);
-    exit;
+    $self = realpath(__FILE__);
+    $script = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    if ($self !== false && $script !== false && $self === $script) {
+        http_response_code(403);
+        exit;
+    }
 }
 
-require dirname(__DIR__) . '/_lib/app.php';
-require dirname(__DIR__) . '/_lib/specs.php';
-require dirname(__DIR__) . '/_lib/media.php';
+require_once dirname(__DIR__) . '/_lib/app.php';
+require_once dirname(__DIR__) . '/_lib/specs.php';
+require_once dirname(__DIR__) . '/_lib/media.php';
 require_once dirname(__DIR__) . '/_lib/photo_exclusions.php';
 require_once dirname(__DIR__) . '/_lib/curated_photos.php';
 require_once dirname(__DIR__) . '/_lib/preferred_covers.php';
@@ -817,7 +823,7 @@ function mirror_drive_photo(string $fileId, int &$budget): ?array
     $budget--;
     foreach (["https://lh3.googleusercontent.com/d/{$fileId}=w1600", 'https://drive.google.com/uc?export=download&id=' . rawurlencode($fileId)] as $url) {
         try {
-            $bytes = http_get($url, 2);
+            $bytes = http_get($url, 3);
         } catch (Throwable $e) {
             continue;
         }
@@ -1049,18 +1055,117 @@ function salgado_sync_is_entry(): bool
     return $arg !== false && $arg === $self;
 }
 
-if (!salgado_sync_is_entry()) {
-    return;
+function salgado_sync_lock_path(): string
+{
+    return sys_get_temp_dir() . '/salgado-sync.lock';
 }
 
-if (in_array('--dry-run', array_map('strval', $_SERVER['argv'] ?? []), true)) {
-    exit(salgado_sync_dry_run());
+/** True si otra corrida tiene el lock. */
+function salgado_sync_is_running(): bool
+{
+    $fh = @fopen(salgado_sync_lock_path(), 'c');
+    if ($fh === false) {
+        return false;
+    }
+    $busy = !flock($fh, LOCK_EX | LOCK_NB);
+    if (!$busy) {
+        flock($fh, LOCK_UN);
+    }
+    fclose($fh);
+    return $busy;
 }
 
-$lock = fopen(sys_get_temp_dir() . '/salgado-sync.lock', 'c');
+/**
+ * Corrida real (MySQL + Drive). 0 ok, 1 error, 2 ya había una en curso.
+ * El cron de cPanel y el endpoint HTTP llaman a esta función.
+ */
+/** Las 13 unidades con aprobación explícita de Mathias (24 nov 2026) para soltar curated y usar Drive. */
+function salgado_sync_approved_unlock_plates(): array
+{
+    return [
+        'DDLJ95', 'HVHS94', 'PSKJ78', 'RGBP20', 'RKRG58', 'RPSH27',
+        'RPSH28', 'SBZG55', 'SFBL43', 'SFYB29', 'SLGD85', 'SWDV33', 'SXKK11',
+    ];
+}
+
+function salgado_sync_ensure_state_tables(PDO $pdo): void
+{
+    $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($drv === 'sqlite') {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS sync_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS sync_state (k TEXT PRIMARY KEY, v TEXT NOT NULL, updated_at TEXT NOT NULL)');
+        return;
+    }
+    $pdo->exec('CREATE TABLE IF NOT EXISTS sync_migrations (name VARCHAR(64) NOT NULL PRIMARY KEY, applied_at DATETIME(3) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS sync_state (k VARCHAR(64) NOT NULL PRIMARY KEY, v MEDIUMTEXT NOT NULL, updated_at DATETIME(3) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+}
+
+/**
+ * Paso único e idempotente: desbloquea solo las 13 galerías aprobadas.
+ * No toca las otras 8 bloqueadas. Si el admin vuelve a bloquear una después,
+ * esta marca impide que un sync futuro la vuelva a desbloquear.
+ */
+function salgado_sync_unlock_approved(PDO $pdo, string $now): int
+{
+    $key = 'unlock_13_drive_2026_11_24';
+    $chk = $pdo->prepare('SELECT 1 FROM sync_migrations WHERE name = ? LIMIT 1');
+    $chk->execute([$key]);
+    if ($chk->fetchColumn()) {
+        return 0;
+    }
+    $plates = salgado_sync_approved_unlock_plates();
+    $marks = implode(',', array_fill(0, count($plates), '?'));
+    $ownTx = !$pdo->inTransaction();
+    if ($ownTx) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $upd = $pdo->prepare("UPDATE vehicles SET photos_locked = 0, updated_at = ? WHERE stock_id IN ({$marks}) AND photos_locked = 1");
+        $upd->execute(array_merge([$now], $plates));
+        $count = $upd->rowCount();
+        $pdo->prepare('INSERT INTO sync_migrations (name, applied_at) VALUES (?, ?)')->execute([$key, $now]);
+        if ($ownTx) {
+            $pdo->commit();
+        }
+        return $count;
+    } catch (Throwable $e) {
+        if ($ownTx && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+function salgado_sync_photo_budget(): int
+{
+    $base = max(50, (int) cfg('sync_photo_budget', 400));
+    $full = getenv('SALGADO_SYNC_FULL') === '1'
+        || in_array('--full', array_map('strval', $_SERVER['argv'] ?? []), true);
+    return $full ? max($base, 1200) : $base;
+}
+
+function salgado_sync_save_report(PDO $pdo, array $report, string $now): void
+{
+    $json = json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json)) {
+        return;
+    }
+    $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($drv === 'sqlite') {
+        $pdo->prepare('INSERT OR REPLACE INTO sync_state (k, v, updated_at) VALUES (?, ?, ?)')
+            ->execute(['last_report', $json, $now]);
+        return;
+    }
+    $pdo->prepare('INSERT INTO sync_state (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = VALUES(updated_at)')
+        ->execute(['last_report', $json, $now]);
+}
+
+function salgado_sync_main(): int
+{
+$lock = fopen(salgado_sync_lock_path(), 'c');
 if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) {
     fwrite(STDOUT, "Ya hay un sync corriendo\n");
-    exit(0);
+    return 2;
 }
 
 $pdo = db();
@@ -1068,6 +1173,11 @@ $pdo->prepare('INSERT INTO sync_runs (started_at) VALUES (?)')->execute([now_db(
 $runId = (int) $pdo->lastInsertId();
 
 try {
+    salgado_sync_ensure_state_tables($pdo);
+    $unlocked = salgado_sync_unlock_approved($pdo, now_db());
+    if ($unlocked > 0) {
+        logln('Galerías desbloqueadas por aprobación (13): ' . $unlocked);
+    }
     $purged = purge_excluded_vehicle_photos($pdo);
     if ($purged > 0) {
         logln('Fotos con patente descubierta retiradas: ' . $purged);
@@ -1111,7 +1221,7 @@ try {
 
     // 1) Fotos: un índice (carpeta a carpeta, o changes.list si hay OAuth) y el
     // match en memoria. Cada carpeta se lista una sola vez. Sin foto se publica con placeholder.
-    $budget = (int) cfg('sync_photo_budget', 150);
+    $budget = salgado_sync_photo_budget();
     $photoMatch = ['by_stock' => [], 'log' => [], 'conflicts' => []];
     if ($driveOk) {
         try {
@@ -1175,9 +1285,25 @@ try {
     $hasUploads = $pdo->prepare("SELECT COUNT(*) FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '/uploads/vehicles/%'");
     $delCuratedRefs = $pdo->prepare("DELETE FROM vehicle_images WHERE vehicle_id = ? AND storage_path LIKE '/uploads/curated/%'");
     $photoStats = ['mirrored' => 0, 'skipped' => 0];
+    $deferredStocks = [];
+    $driveExpected = [];
+    $missingDriveFolder = [];
 
     foreach ($rows as $rank => $r) {
         $id = 'sa-' . $r['stockId'];
+        if ($driveOk) {
+            $driveCount = count($r['photos']);
+            $driveExpected[(string) $r['stockId']] = $driveCount;
+            if ($driveCount === 0) {
+                $missingDriveFolder[] = [
+                    'stock_id' => (string) $r['stockId'],
+                    'brand' => (string) $r['brand'],
+                    'model' => (string) $r['model'],
+                    'year' => (int) $r['year'],
+                    'via' => (string) ($photoMatch['by_stock'][$r['stockId']]['via'] ?? 'none'),
+                ];
+            }
+        }
         $slug = slugify("{$r['brand']} {$r['model']} {$r['year']} {$r['plate']}");
         $desc = "Patente {$r['plate']}. Ubicación: {$r['location']}. Origen: {$r['origin']}.";
         $feat = isset($featured[$r['stockId']]) ? 1 : 0;
@@ -1215,19 +1341,24 @@ try {
         } else {
             $insert->execute(array_merge([$id], $params, [$feat, $now, $now]));
         }
-        // Fotos: Drive manda salvo fotos manuales del admin (/uploads/vehicles/).
+        // Fotos: Drive manda salvo fotos manuales del admin (/uploads/vehicles/) o galerías bloqueadas.
         // Si Drive no responde o no trae fotos válidas, se conservan las actuales.
-        // Se dejan de referenciar /uploads/curated, sin borrar los archivos en disco.
-        $delCuratedRefs->execute([$id]);
+        // Las no bloqueadas dejan de referenciar /uploads/curated (sin borrar los archivos en disco).
+        $isLockedRow = $found && (int) $found['photos_locked'] === 1;
+        if (!$isLockedRow) {
+            $delCuratedRefs->execute([$id]);
+        }
         $hasUploads->execute([$id]);
         $manual = (int) $hasUploads->fetchColumn();
         $realPhotos->execute([$id]);
         $remaining = (int) $realPhotos->fetchColumn();
-        // Manual o galería Drive que el admin bloqueó: no se pisa. El set curado ya se soltó.
-        $locked = $manual > 0 || ($found && (int) $found['photos_locked'] === 1 && $remaining > 0);
+        $locked = $manual > 0 || ($isLockedRow && $remaining > 0);
         // Si quedaron fotos pendientes por el tope de descargas, no se reemplaza a medias.
-        if ($deferred && $found) {
-            $locked = true;
+        if ($deferred) {
+            $deferredStocks[] = (string) $r['stockId'];
+            if ($found) {
+                $locked = true;
+            }
         }
         if (!$locked && ($images || !$found)) {
             $delImg->execute([$id]);
@@ -1307,6 +1438,18 @@ try {
 
     $summary = 'ok · ' . count($rows) . " unidades, {$archived} archivadas, {$withoutPhoto} con placeholder, fotos {$photoStats['mirrored']} ok / {$photoStats['skipped']} omitidas" . ($driveOk ? '' : ' · Drive sin respuesta');
     logln($summary);
+    salgado_sync_save_report($pdo, [
+        'generated_at' => gmdate('c'),
+        'drive_ok' => $driveOk,
+        'sheet_count' => count($rows),
+        'archived' => $archived,
+        'without_photo' => $withoutPhoto,
+        'mirrored' => $photoStats['mirrored'],
+        'skipped_photos' => $photoStats['skipped'],
+        'deferred_stocks' => array_values(array_unique($deferredStocks)),
+        'missing_drive_folder' => $missingDriveFolder,
+        'drive_expected' => $driveExpected,
+    ], now_db());
     $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 1, vehicles = ?, removed = ?, message = ?, log = ? WHERE id = ?')
         ->execute([now_db(), count($rows), $archived, mb_substr($summary, 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);
 } catch (Throwable $e) {
@@ -1316,5 +1459,18 @@ try {
     logln('ERROR: ' . $e->getMessage());
     $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 0, message = ?, log = ? WHERE id = ?')
         ->execute([now_db(), mb_substr($e->getMessage(), 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);
-    exit(1);
+    return 1;
 }
+
+    return 0;
+}
+
+if (!salgado_sync_is_entry()) {
+    return;
+}
+
+if (in_array('--dry-run', array_map('strval', $_SERVER['argv'] ?? []), true)) {
+    exit(salgado_sync_dry_run());
+}
+
+exit(salgado_sync_main());

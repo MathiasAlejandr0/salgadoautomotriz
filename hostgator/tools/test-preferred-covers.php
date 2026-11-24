@@ -297,6 +297,18 @@ check($gotAuto === ['x1', 'x0'], 'con el automático la portada queda primera');
 @unlink($autoFile);
 putenv('SALGADO_AUTO_COVERS');
 
+// Si el mapa manual apunta a curated y la galería ya usa Drive, cae a auto_covers.json.
+check(auto_cover_token('RGBP20') !== null, 'RGBP20 tiene portada automática');
+check(auto_cover_token('HVHS94') !== null, 'HVHS94 tiene portada automática');
+check(auto_cover_token('SDJS53') !== null, 'SDJS53 tiene portada automática');
+$rgbpAuto = substr((string) auto_cover_token('RGBP20'), 6);
+$rgbpDrive = [
+    ['storage_path' => '/uploads/drive/otra1.webp', 'drive_file_id' => 'otra1', 'sort_order' => 0],
+    ['storage_path' => '/uploads/drive/' . $rgbpAuto . '.webp', 'drive_file_id' => $rgbpAuto, 'sort_order' => 1],
+];
+$orderedRgbp = with_preferred_cover($rgbpDrive, 'RGBP20', true);
+check(($orderedRgbp[0]['drive_file_id'] ?? '') === $rgbpAuto, 'RGBP20 con Drive cae al automático 3/4 frontal');
+
 if ($failed > 0) {
     fwrite(STDERR, "{$failed} pruebas fallaron\n");
     exit(1);
