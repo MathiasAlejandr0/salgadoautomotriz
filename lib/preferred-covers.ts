@@ -1,12 +1,13 @@
 import tokens from "@/hostgator/api/_lib/preferred_covers.json";
+import autoTokens from "@/hostgator/api/_lib/auto_covers.json";
 import type { VehicleImage } from "@/types/database";
 
 /**
  * Misma regla que hostgator/api/_lib/preferred_covers.php.
- * La portada de tarjetas y ficha es la primera foto local; aquí la elegida
- * pasa a sort_order 0 sin borrar el resto.
+ * El mapa manual gana; auto_covers.json (CLIP) completa el resto.
  */
-const COVERS = tokens as Record<string, string>;
+const MANUAL = tokens as Record<string, string>;
+const AUTO = autoTokens as Record<string, string>;
 
 const TOKEN = /^(?:drive:[A-Za-z0-9_-]{16,128}|curated:[a-f0-9]{12}\/\d{2})$/;
 
@@ -17,10 +18,19 @@ export type CoverImage = {
   sort_order: number;
 };
 
-export function preferredCoverToken(stockId: string | null | undefined): string | null {
+function validToken(token: unknown): token is string {
+  return typeof token === "string" && TOKEN.test(token);
+}
+
+/** Mapa manual si existe; si no, el automático (cuando allowAuto). */
+export function preferredCoverToken(
+  stockId: string | null | undefined,
+  allowAuto = true
+): string | null {
   if (!stockId) return null;
-  const token = COVERS[stockId];
-  return typeof token === "string" && TOKEN.test(token) ? token : null;
+  if (validToken(MANUAL[stockId])) return MANUAL[stockId];
+  if (allowAuto && validToken(AUTO[stockId])) return AUTO[stockId];
+  return null;
 }
 
 function escapeRegExp(value: string): string {

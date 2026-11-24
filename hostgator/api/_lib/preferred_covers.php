@@ -12,7 +12,12 @@ declare(strict_types=1);
  * No es la posición. La foto elegida pasa a sort_order 0 y el resto se corre
  * sin cambiar su orden relativo. No se borra ni se renombra ninguna foto.
  *
- * El mapa vive en preferred_covers.json (lo leen también el build de Next).
+ * El mapa manual vive en preferred_covers.json (lo leen también el build de Next).
+ * auto_covers.json lo arma hostgator/tools/choose-covers.py (CLIP, gratis) con
+ * la regla: 3/4 frontal a la derecha, si no 3/4 al otro lado, si no frontal
+ * puro, si no cualquier exterior; nunca interior ni trasera si hay alternativa.
+ * El mapa manual gana. El automático no pisa una galería con photos_locked
+ * (portada o orden elegidos por el admin).
  */
 
 function preferred_cover_tokens(): array
@@ -46,6 +51,67 @@ function preferred_cover_token(string $stockId): ?string
         return null;
     }
     return $token;
+}
+
+function auto_covers_file(): string
+{
+    $env = getenv('SALGADO_AUTO_COVERS');
+    if (is_string($env) && $env !== '' && is_file($env)) {
+        return $env;
+    }
+    return __DIR__ . '/auto_covers.json';
+}
+
+/** @return array<string, string> */
+function auto_cover_tokens(): array
+{
+    static $map = null;
+    static $loaded = null;
+    $file = auto_covers_file();
+    if ($map !== null && $loaded === $file) {
+        return $map;
+    }
+    $loaded = $file;
+    $map = [];
+    if (!is_file($file)) {
+        return $map;
+    }
+    $raw = file_get_contents($file);
+    if ($raw === false) {
+        return $map;
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return $map;
+    }
+    foreach ($decoded as $stockId => $token) {
+        if (is_string($token)) {
+            $map[(string) $stockId] = $token;
+        }
+    }
+    return $map;
+}
+
+function auto_cover_token(string $stockId): ?string
+{
+    $token = auto_cover_tokens()[$stockId] ?? null;
+    if (!is_string($token)) {
+        return null;
+    }
+    if (!preg_match('/^(?:drive:[A-Za-z0-9_-]{16,128}|curated:[a-f0-9]{12}\/\d{2})$/', $token)) {
+        return null;
+    }
+    return $token;
+}
+
+/** Mapa manual si existe; si no, el automático (cuando $allowAuto). */
+function cover_token_for_stock(string $stockId, bool $allowAuto = true): ?string
+{
+    $manual = preferred_cover_token($stockId);
+    if ($manual !== null) {
+        return $manual;
+    }
+    return $allowAuto ? auto_cover_token($stockId) : null;
 }
 
 function image_matches_cover_token(array $img, string $token): bool
@@ -105,10 +171,11 @@ function path_has_curated_file(string $path, string $rel): bool
  * @param array<int, array> $images
  * @return array<int, array>
  */
-function with_preferred_cover(array $images, string $stockId): array
+function with_preferred_cover(array $images, string $stockId, bool $allowAuto = true): array
 {
     $sorted = cover_images_in_order($images);
-    $token = preferred_cover_token($stockId);
+    $allowAuto = func_num_args() < 3 || $allowAuto;
+    $token = cover_token_for_stock($stockId, $allowAuto);
     if ($token === null) {
         return $sorted;
     }
@@ -211,11 +278,11 @@ function order_curated_pairs(array $pairs, string $stockId): array
 
 /**
  * Deja la portada preferida en la base. Idempotente. No borra filas.
- * Corre aunque el auto tenga photos_locked: el sync siguiente no la pisa.
+ * El mapa manual corre aunque photos_locked esté en 1. El automático no.
  */
-function persist_preferred_cover(PDO $pdo, string $vehicleId, string $stockId): bool
+function persist_preferred_cover(PDO $pdo, string $vehicleId, string $stockId, bool $allowAuto = true): bool
 {
-    if ($vehicleId === '' || preferred_cover_token($stockId) === null) {
+    if ($vehicleId === '' || cover_token_for_stock($stockId, $allowAuto) === null) {
         return false;
     }
     $list = $pdo->prepare(
@@ -227,7 +294,7 @@ function persist_preferred_cover(PDO $pdo, string $vehicleId, string $stockId): 
     if (count($rows) < 2) {
         return false;
     }
-    $next = with_preferred_cover($rows, $stockId);
+    $next = with_preferred_cover($rows, $stockId, $allowAuto);
     $changed = false;
     foreach ($rows as $i => $row) {
         if ((string) $row['id'] !== (string) $next[$i]['id'] || (int) $row['sort_order'] !== (int) $next[$i]['sort_order']) {
@@ -262,19 +329,23 @@ function persist_preferred_cover(PDO $pdo, string $vehicleId, string $stockId): 
 /** Reaplica la portada de cada stock del mapa que exista en vehicles. */
 function apply_preferred_covers(PDO $pdo): int
 {
-    $find = $pdo->prepare('SELECT id FROM vehicles WHERE stock_id = ? LIMIT 1');
+    $find = $pdo->prepare('SELECT id, photos_locked FROM vehicles WHERE stock_id = ? LIMIT 1');
     $changed = 0;
-    foreach (preferred_cover_tokens() as $stockId => $_token) {
+    $stockIds = array_unique(array_merge(array_keys(preferred_cover_tokens()), array_keys(auto_cover_tokens())));
+    foreach ($stockIds as $stockId) {
         $stockId = (string) $stockId;
-        if (preferred_cover_token($stockId) === null) {
-            continue;
-        }
         $find->execute([$stockId]);
-        $vehicleId = $find->fetchColumn();
-        if ($vehicleId === false) {
+        $row = $find->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
             continue;
         }
-        if (persist_preferred_cover($pdo, (string) $vehicleId, $stockId)) {
+        $locked = (int) ($row['photos_locked'] ?? 0) === 1;
+        // Manual se reaplica aunque esté bloqueada. El automático no pisa al admin.
+        $allowAuto = !$locked;
+        if (cover_token_for_stock($stockId, $allowAuto) === null) {
+            continue;
+        }
+        if (persist_preferred_cover($pdo, (string) $row['id'], $stockId, $allowAuto)) {
             $changed++;
         }
     }

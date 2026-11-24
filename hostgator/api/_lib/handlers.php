@@ -31,7 +31,8 @@ function public_vehicle(array $v, ?string $slug = null): array
     if (isset($v['vehicle_images']) && is_array($v['vehicle_images'])) {
         $v['vehicle_images'] = with_preferred_cover(
             images_without_excluded($v['vehicle_images']),
-            (string) ($v['stock_id'] ?? '')
+            (string) ($v['stock_id'] ?? ''),
+            empty($v['photos_locked'])
         );
     }
     $cover = '';
