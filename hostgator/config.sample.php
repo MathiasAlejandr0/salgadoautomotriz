@@ -33,9 +33,9 @@ return [
     // 'uploads_dir' => '/home/cpaneluser/public_html/uploads',
 ];
 
-    // Secreto para disparar el sync por HTTP (POST /api/sync) desde GitHub Actions.
-    // El mismo valor va en el secreto del repo SYNC_CRON_SECRET.
+    // Opcional: el deploy ya sube el hash SHA-256 de SYNC_CRON_SECRET a api/_lib/sync-secret.sha256.
+    // Puedes dejar esto vacío si usas ese secreto en GitHub Actions.
     // Genera uno largo, de 32 caracteres o más. Nunca lo subas a git.
     // 'sync_cron_secret' => '',
     // Fotos nuevas por corrida (el resto se descarga en la siguiente).
-    // 'sync_photo_budget' => 150,
+    // 'sync_photo_budget' => 400,

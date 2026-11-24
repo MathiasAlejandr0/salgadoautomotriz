@@ -284,6 +284,17 @@ check(ids_of($tieMatch, 'TIE01') === ['u1', 'u2'], 'si empatan en cantidad, gana
 check(vehicle_has_real_photo(['vehicle_images' => [['storage_path' => '/placeholder-car.svg']]]) === false, 'el placeholder no es foto real');
 check(vehicle_has_real_photo(['vehicle_images' => [['storage_path' => '/uploads/drive/abc.webp']]]) === true, 'una foto en uploads sí cuenta');
 
+$exclId = excluded_photo_ids()[0] ?? '';
+check($exclId !== '', 'hay al menos una foto excluida en la lista');
+$limVehicles = [veh('ZRF009', 'ZRF009', 'Dongfeng', 'DB200ZH', 2024)];
+$limNodes = [node('zf', 'ZRF009', 'root', true)];
+$limNodes[] = node($exclId, '00_excl.jpg', 'zf', false);
+for ($k = 1; $k <= 12; $k++) {
+    $limNodes[] = node("zimg{$k}", sprintf('%02d.jpg', $k), 'zf', false);
+}
+$limMatch = match_sheet_photos($limVehicles, $limNodes);
+check(count(ids_of($limMatch, 'ZRF009')) === 12, 'foto excluida no consume el cupo de 12 fotos');
+
 if ($failed > 0) {
     fwrite(STDERR, "{$failed} pruebas fallaron\n");
     exit(1);

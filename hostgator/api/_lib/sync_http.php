@@ -4,9 +4,9 @@ declare(strict_types=1);
 /*
  * Disparo y estado del sync de planilla + Drive, sin cron de cPanel.
  * POST /api/sync  — secreto en Authorization: Bearer o cabecera X-Sync-Secret.
- * GET  /api/sync/status — resumen de la última corrida y unidades sin foto.
- * El secreto vive en salgado-config.php (sync_cron_secret) o en la variable
- * de entorno SYNC_CRON_SECRET. Nunca se escribe en logs ni en la respuesta.
+ * GET  /api/sync/status — última corrida, faltantes sin carpeta, bloqueados e incompletas.
+ * El secreto se valida contra salgado-config.php (sync_cron_secret), SYNC_CRON_SECRET
+ * o el hash SHA-256 desplegado en api/_lib/sync-secret.sha256. Nunca se imprime.
  */
 
 require_once __DIR__ . '/app.php';
@@ -19,6 +19,30 @@ function sync_cron_secret(): string
         return $fromCfg;
     }
     return trim((string) (getenv('SYNC_CRON_SECRET') ?: ''));
+}
+
+function sync_secret_hash_path(): string
+{
+    $env = getenv('SALGADO_SYNC_SECRET_HASH_FILE');
+    if (is_string($env) && $env !== '') {
+        return $env;
+    }
+    return __DIR__ . '/sync-secret.sha256';
+}
+
+function sync_secret_hash(): string
+{
+    $file = sync_secret_hash_path();
+    if (!is_file($file)) {
+        return '';
+    }
+    $raw = strtolower(trim((string) @file_get_contents($file)));
+    return preg_match('/^[a-f0-9]{64}$/', $raw) === 1 ? $raw : '';
+}
+
+function sync_configured(): bool
+{
+    return strlen(sync_cron_secret()) >= 16 || sync_secret_hash() !== '';
 }
 
 function sync_request_secret(): string
@@ -42,17 +66,24 @@ function sync_request_secret(): string
 
 function sync_secret_ok(): bool
 {
-    $expected = sync_cron_secret();
     $got = sync_request_secret();
-    if ($expected === '' || strlen($expected) < 16 || $got === '') {
+    if (strlen($got) < 16) {
         return false;
     }
-    return hash_equals($expected, $got);
+    $expected = sync_cron_secret();
+    if (strlen($expected) >= 16 && hash_equals($expected, $got)) {
+        return true;
+    }
+    $hash = sync_secret_hash();
+    if ($hash !== '' && hash_equals($hash, hash('sha256', $got))) {
+        return true;
+    }
+    return false;
 }
 
 function require_sync_secret(): void
 {
-    if (sync_cron_secret() === '' || strlen(sync_cron_secret()) < 16) {
+    if (!sync_configured()) {
         fail(503, 'Sync HTTP no configurado');
     }
     if (!sync_secret_ok()) {
@@ -79,7 +110,7 @@ function salgado_sync_exec_disabled(): bool
 }
 
 /** Arranca el CLI en segundo plano. False si exec no está disponible. */
-function salgado_sync_spawn(): bool
+function salgado_sync_spawn(bool $full = false): bool
 {
     $script = realpath(dirname(__DIR__) . '/_cron/sync.php');
     if ($script === false || salgado_sync_exec_disabled()) {
@@ -91,14 +122,31 @@ function salgado_sync_spawn(): bool
     }
     $out = $logDir . '/sync-http.log';
     $cmd = escapeshellarg(salgado_sync_php_bin()) . ' ' . escapeshellarg($script)
+        . ($full ? ' --full' : '')
         . ' >> ' . escapeshellarg($out) . ' 2>&1 &';
     exec($cmd);
     return true;
 }
 
-function salgado_sync_placeholder_rows(PDO $pdo): array
+function salgado_sync_last_report(PDO $pdo): ?array
 {
-    $sql = "SELECT v.stock_id, v.brand, v.model, v.year,
+    try {
+        $stmt = $pdo->prepare('SELECT v FROM sync_state WHERE k = ? LIMIT 1');
+        $stmt->execute(['last_report']);
+        $raw = $stmt->fetchColumn();
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function salgado_sync_vehicle_photo_counts(PDO $pdo): array
+{
+    $sql = "SELECT v.stock_id, v.brand, v.model, v.year, v.source, v.photos_locked,
                    COUNT(i.id) AS photos
             FROM vehicles v
             LEFT JOIN vehicle_images i
@@ -106,44 +154,66 @@ function salgado_sync_placeholder_rows(PDO $pdo): array
              AND i.storage_path IS NOT NULL
              AND i.storage_path NOT LIKE '%placeholder%'
             WHERE v.published = 1
-              AND v.source = 'sheet'
               AND (v.archived_at IS NULL OR v.archived_at = '')
-            GROUP BY v.id, v.stock_id, v.brand, v.model, v.year
-            HAVING photos = 0
+            GROUP BY v.id, v.stock_id, v.brand, v.model, v.year, v.source, v.photos_locked
             ORDER BY v.stock_id";
     try {
-        return $pdo->query($sql)->fetchAll() ?: [];
+        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) ?: [];
     } catch (Throwable $e) {
         return [];
     }
 }
 
-function salgado_sync_status_payload(bool $withLog = false): array
+function salgado_sync_build_status(PDO $pdo, bool $withLog = false): array
 {
-    $pdo = db();
     $run = $pdo->query(
         'SELECT id, started_at, finished_at, ok, vehicles, removed, message'
         . ($withLog ? ', log' : '')
         . ' FROM sync_runs ORDER BY id DESC LIMIT 1'
-    )->fetch() ?: null;
+    )->fetch(PDO::FETCH_ASSOC) ?: null;
 
-    $placeholders = [];
-    foreach (salgado_sync_placeholder_rows($pdo) as $row) {
-        $placeholders[] = [
-            'stock_id' => (string) $row['stock_id'],
-            'brand' => (string) $row['brand'],
-            'model' => (string) $row['model'],
-            'year' => (int) $row['year'],
-        ];
+    $report = salgado_sync_last_report($pdo);
+    $driveExpected = is_array($report['drive_expected'] ?? null) ? $report['drive_expected'] : [];
+    $missingMap = [];
+    foreach (is_array($report['missing_drive_folder'] ?? null) ? $report['missing_drive_folder'] : [] as $item) {
+        if (is_array($item) && isset($item['stock_id'])) {
+            $missingMap[(string) $item['stock_id']] = (string) ($item['via'] ?? 'none');
+        }
     }
 
-    $published = 0;
-    try {
-        $published = (int) $pdo->query(
-            "SELECT COUNT(*) FROM vehicles WHERE published = 1 AND (archived_at IS NULL OR archived_at = '')"
-        )->fetchColumn();
-    } catch (Throwable $e) {
-        $published = 0;
+    $rows = salgado_sync_vehicle_photo_counts($pdo);
+    $published = count($rows);
+    $missing = [];
+    $locked = [];
+    $incomplete = [];
+
+    foreach ($rows as $row) {
+        $sid = (string) ($row['stock_id'] ?? '');
+        $photos = (int) ($row['photos'] ?? 0);
+        $isLocked = (int) ($row['photos_locked'] ?? 0) === 1;
+        $base = [
+            'stock_id' => $sid,
+            'brand' => (string) ($row['brand'] ?? ''),
+            'model' => (string) ($row['model'] ?? ''),
+            'year' => (int) ($row['year'] ?? 0),
+        ];
+        if ((string) ($row['source'] ?? '') === 'sheet' && $photos === 0) {
+            $missing[] = $base + ['via' => $missingMap[$sid] ?? 'none'];
+        }
+        $expected = isset($driveExpected[$sid]) ? (int) $driveExpected[$sid] : null;
+        if ($isLocked) {
+            $locked[] = $base + [
+                'photos' => $photos,
+                'drive_photos' => $expected,
+            ];
+            continue;
+        }
+        if ((string) ($row['source'] ?? '') === 'sheet' && $photos > 0 && $expected !== null && $photos < $expected) {
+            $incomplete[] = $base + [
+                'photos' => $photos,
+                'drive_photos' => $expected,
+            ];
+        }
     }
 
     $last = null;
@@ -169,15 +239,29 @@ function salgado_sync_status_payload(bool $withLog = false): array
         'running' => $running,
         'last_run' => $last,
         'published' => $published,
-        'placeholders' => $placeholders,
-        'placeholder_count' => count($placeholders),
+        'missing_drive_folder' => $missing,
+        'missing_drive_folder_count' => count($missing),
+        'placeholders' => $missing,
+        'placeholder_count' => count($missing),
+        'locked' => $locked,
+        'locked_count' => count($locked),
+        'incomplete_galleries' => $incomplete,
+        'incomplete_count' => count($incomplete),
+        'deferred_stocks' => is_array($report['deferred_stocks'] ?? null) ? array_values($report['deferred_stocks']) : [],
+        'drive_ok' => $report['drive_ok'] ?? null,
+        'last_report_at' => $report['generated_at'] ?? null,
     ];
+}
+
+function salgado_sync_status_payload(bool $withLog = false): array
+{
+    return salgado_sync_build_status(db(), $withLog);
 }
 
 function h_sync_status(): void
 {
     require_sync_secret();
-    if (!rate_limit('sync-status:' . client_ip(), 30, 60)) {
+    if (!rate_limit('sync-status:' . client_ip(), 60, 60)) {
         too_many();
     }
     json_out(salgado_sync_status_payload(true));
@@ -186,7 +270,7 @@ function h_sync_status(): void
 function h_sync_run(): void
 {
     require_sync_secret();
-    if (!rate_limit('sync-run:' . client_ip(), 10, 3600)) {
+    if (!rate_limit('sync-run:' . client_ip(), 15, 3600)) {
         too_many();
     }
     if (salgado_sync_is_running()) {
@@ -198,22 +282,39 @@ function h_sync_run(): void
         ], 409);
     }
 
+    $full = (string) ($_GET['full'] ?? '') === '1';
+    if (!$full) {
+        $raw = (string) file_get_contents('php://input', false, null, 0, 4096);
+        if ($raw !== '') {
+            $body = json_decode($raw, true);
+            if (is_array($body) && !empty($body['full'])) {
+                $full = true;
+            }
+        }
+    }
+
     ignore_user_abort(true);
     @set_time_limit(0);
 
-    if (salgado_sync_spawn()) {
+    if (salgado_sync_spawn($full)) {
         json_out([
             'ok' => true,
             'accepted' => true,
             'mode' => 'background',
+            'full' => $full,
             'message' => 'Sync iniciado en segundo plano. Consulte GET /api/sync/status.',
         ], 202);
+    }
+
+    if ($full) {
+        putenv('SALGADO_SYNC_FULL=1');
     }
 
     $payload = json_encode([
         'ok' => true,
         'accepted' => true,
         'mode' => 'inline',
+        'full' => $full,
         'message' => 'Sync aceptado. Consulte GET /api/sync/status.',
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     http_response_code(202);

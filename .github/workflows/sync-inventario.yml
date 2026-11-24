@@ -1,9 +1,9 @@
 # Dispara el sync de planilla + Drive en el hosting, sin cron de cPanel.
 # Corre cada 2 horas y también a mano (Actions > Sync inventario > Run workflow).
 # Secretos (Settings > Secrets and variables > Actions):
-#   SYNC_CRON_SECRET  — el mismo valor que sync_cron_secret en
-#                        /home/<usuario>/salgado-config.php (fuera de public_html).
-# No imprime el secreto. Si falta, el job falla con una instrucción clara.
+#   SYNC_CRON_SECRET — el deploy sube su hash SHA-256 a api/_lib/sync-secret.sha256
+#   (también puede ir como sync_cron_secret en salgado-config.php).
+# No imprime el secreto.
 name: Sync inventario
 on:
   schedule:
@@ -26,7 +26,6 @@ jobs:
           if [ -z "${SYNC_CRON_SECRET:-}" ]; then
             echo "Falta el secreto SYNC_CRON_SECRET en el repo."
             echo "Cárgalo en Settings > Secrets and variables > Actions."
-            echo "Usa el mismo valor que sync_cron_secret en salgado-config.php del servidor."
             exit 1
           fi
           post() {
@@ -64,14 +63,12 @@ jobs:
           except Exception:
               print("Respuesta no JSON")
               sys.exit(0)
-          # No imprimir claves inesperadas; solo el mensaje de estado.
-          for k in ("ok","accepted","mode","message","error"):
+          for k in ("ok","accepted","mode","full","message","error"):
               if k in data:
                   print(f"{k}: {data[k]}")
           PY
           if [ "$code" = "503" ]; then
-            echo "El servidor no tiene sync_cron_secret (o tiene menos de 16 caracteres)."
-            echo "Agrega la clave en /home/<usuario>/salgado-config.php después de desplegar este PR."
+            echo "El servidor aún no tiene el secreto de sync (ni hash desplegado ni salgado-config.php)."
             exit 1
           fi
           if [ "$code" = "401" ]; then
@@ -79,14 +76,13 @@ jobs:
             exit 1
           fi
           if [ "$code" = "404" ]; then
-            echo "El endpoint aún no está en el hosting. Hay que mergear este PR a hostgator y esperar el deploy."
+            echo "El endpoint aún no está en el hosting. Hay que mergear el PR a hostgator y esperar el deploy."
             exit 1
           fi
           if [ "$code" != "202" ] && [ "$code" != "409" ]; then
             echo "Respuesta inesperada"
             exit 1
           fi
-          # Espera a que termine (descargas de fotos pueden tomar varios minutos).
           for i in $(seq 1 40); do
             sleep 15
             set +e
@@ -104,14 +100,19 @@ jobs:
           import json,sys
           d=json.load(open("/tmp/sync-status.json"))
           run=d.get("last_run") or {}
-          print("running={0} last_ok={1} finished={2} message={3} placeholders={4} published={5}".format(
+          print("running={0} ok={1} finished={2} pub={3} sin_carpeta={4} bloqueados={5} incompletos={6} msg={7}".format(
               d.get("running"), run.get("ok"), run.get("finished_at"),
-              run.get("message"), d.get("placeholder_count"), d.get("published")))
+              d.get("published"), d.get("missing_drive_folder_count"),
+              d.get("locked_count"), d.get("incomplete_count"), run.get("message")))
           if d.get("running"):
               sys.exit(2)
           if run.get("finished_at") and run.get("ok") is False:
               sys.exit(3)
           if run.get("finished_at"):
+              sin=[x.get("stock_id") for x in d.get("missing_drive_folder") or []]
+              inc=[f"{x.get('stock_id')}({x.get('photos')}/{x.get('drive_photos')})" for x in d.get("incomplete_galleries") or []]
+              if sin: print("Sin carpeta Drive:", ", ".join(sin))
+              if inc: print("Incompletos:", ", ".join(inc))
               sys.exit(0)
           sys.exit(2)
           PY

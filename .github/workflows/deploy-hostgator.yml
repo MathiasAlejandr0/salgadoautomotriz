@@ -1,7 +1,9 @@
 # Deploy automático a HostGator por FTPS en cada push a la rama hostgator.
 # Secrets requeridos (Settings > Secrets and variables > Actions):
-#   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
+#   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD, SYNC_CRON_SECRET
 # La config con credenciales (salgado-config.php) vive FUERA de public_html y nunca se sube.
+# El deploy escribe solo el hash SHA-256 de SYNC_CRON_SECRET en api/_lib/sync-secret.sha256
+# (bloqueado por .htaccess) para disparar el sync sin editar salgado-config.php a mano.
 # El sync con state file solo borra archivos que ESE action subió antes. Un index.html
 # de un export anterior (o un chunk de /_next que nunca entró al state) se queda y
 # el HTML viejo apunta a un CSS que ya no existe.
@@ -11,16 +13,13 @@
 # El resto (api/, .htaccess, páginas .html de la raíz) se sube con el state file:
 # no toca uploads/ ni archivos que el action no haya subido.
 name: Deploy HostGator
-
 on:
   push:
     branches: [hostgator]
   workflow_dispatch:
-
 concurrency:
   group: deploy-hostgator
   cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -42,9 +41,30 @@ jobs:
       - name: Verificar que no va ninguna config con credenciales
         run: |
           cd hostgator/dist/salgado-hostgator/public_html
-          if find . -name 'salgado-config.php' -o -name 'config.php' -o -name '.env*' | grep -q .; then
-            echo "Archivo de config con credenciales en el paquete"; exit 1
+          if find . -name 'salgado-config.php' -o -name 'config.php' -o -name '.env*' -o -name 'sync-secret.sha256' | grep -q .; then
+            echo "Archivo de config o secreto en el paquete"; exit 1
           fi
+
+      # Solo el hash SHA-256 (sin el secreto en texto plano), dentro de api/_lib/ (Require all denied).
+      - name: Preparar hash del secreto de sync
+        env:
+          SYNC_CRON_SECRET: ${{ secrets.SYNC_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SYNC_CRON_SECRET:-}" ]; then
+            echo "Falta el secreto SYNC_CRON_SECRET en el repo."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          secret = os.environ["SYNC_CRON_SECRET"].strip()
+          if len(secret) < 16:
+              raise SystemExit("SYNC_CRON_SECRET debe tener al menos 16 caracteres")
+          out = Path("hostgator/dist/salgado-hostgator/public_html/api/_lib/sync-secret.sha256")
+          out.write_text(hashlib.sha256(secret.encode("utf-8")).hexdigest() + "\n")
+          print("Hash de sync generado en api/_lib/sync-secret.sha256")
+          PY
 
       # api/, .htaccess, vehicle-index.json y las .html de la raíz.
       # _next y catalogo van en los pasos de abajo: este exclude evita que el
@@ -104,3 +124,79 @@ jobs:
           exclude: |
             **/.git*
             **/.git*/**
+
+      - name: Disparar sync completo post-deploy
+        env:
+          SYNC_CRON_SECRET: ${{ secrets.SYNC_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          BASE="https://salgadoautomotriz.cl"
+          post() {
+            curl -sS -o /tmp/sync-post.json -w "%{http_code}" \
+              --connect-timeout 20 --max-time 90 \
+              -X POST \
+              -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
+              -H "Accept: application/json" \
+              "$BASE/api/sync?full=1"
+          }
+          code=""
+          attempt=1
+          while [ "$attempt" -le 4 ]; do
+            echo "Intento $attempt de POST /api/sync?full=1"
+            set +e
+            code=$(post)
+            curl_ok=$?
+            set -e
+            if [ "$curl_ok" -eq 0 ] && [ "$code" != "502" ] && [ "$code" != "503" ] && [ "$code" != "504" ]; then
+              break
+            fi
+            echo "HTTP=$code curl=$curl_ok, reintento en 10s"
+            attempt=$((attempt + 1))
+            sleep 10
+          done
+          echo "HTTP $code"
+          if [ "$code" != "202" ] && [ "$code" != "409" ]; then
+            cat /tmp/sync-post.json || true
+            exit 1
+          fi
+          for i in $(seq 1 60); do
+            sleep 15
+            set +e
+            scode=$(curl -sS -o /tmp/sync-status.json -w "%{http_code}" \
+              --connect-timeout 20 --max-time 30 \
+              -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
+              -H "Accept: application/json" \
+              "$BASE/api/sync/status")
+            set -e
+            if [ "$scode" != "200" ]; then
+              echo "status HTTP $scode, se reintenta"
+              continue
+            fi
+            python3 - <<'PY'
+          import json,sys
+          d=json.load(open("/tmp/sync-status.json"))
+          run=d.get("last_run") or {}
+          print("running={0} ok={1} finished={2} pub={3} sin_carpeta={4} bloqueados={5} incompletos={6} msg={7}".format(
+              d.get("running"), run.get("ok"), run.get("finished_at"),
+              d.get("published"), d.get("missing_drive_folder_count"),
+              d.get("locked_count"), d.get("incomplete_count"), run.get("message")))
+          if d.get("running"):
+              sys.exit(2)
+          if run.get("finished_at") and run.get("ok") is False:
+              sys.exit(3)
+          if run.get("finished_at"):
+              sys.exit(0)
+          sys.exit(2)
+          PY
+            st=$?
+            if [ "$st" -eq 0 ]; then
+              echo "Sync post-deploy completado"
+              exit 0
+            fi
+            if [ "$st" -eq 3 ]; then
+              echo "El sync post-deploy falló"
+              exit 1
+            fi
+          done
+          echo "El sync sigue corriendo tras 15 minutos"
+          exit 1
