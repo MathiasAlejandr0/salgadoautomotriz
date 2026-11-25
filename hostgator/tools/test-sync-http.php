@@ -155,6 +155,22 @@ check(str_contains($dwf, 'sync-secret.sha256'), 'el deploy genera el hash SHA-25
 check(str_contains($dwf, '/api/sync?full=1'), 'el deploy dispara sync completo al terminar');
 check(!preg_match('/echo\s+["\']\$\{?SYNC_CRON_SECRET/', $dwf), 'el deploy no imprime el valor del secreto');
 
+// 4b. SQL de status sin archived_at = '' y corrida colgada antigua no queda running=true.
+$syncHttpSrc = (string) file_get_contents(dirname(__DIR__) . '/api/_lib/sync_http.php');
+check(!str_contains($syncHttpSrc, "archived_at = ''"), 'sync_http no compara DATETIME contra cadena vacía');
+$pdoStale = new PDO('sqlite::memory:');
+$pdoStale->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdoStale->exec('CREATE TABLE sync_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, finished_at TEXT, ok INTEGER, vehicles INTEGER, removed INTEGER, message TEXT, log TEXT)');
+$pdoStale->exec('CREATE TABLE sync_state (k TEXT PRIMARY KEY, v TEXT, updated_at TEXT)');
+$pdoStale->exec('CREATE TABLE vehicles (id TEXT PRIMARY KEY, stock_id TEXT, brand TEXT, model TEXT, year INTEGER, source TEXT, published INTEGER, archived_at TEXT, photos_locked INTEGER)');
+$pdoStale->exec('CREATE TABLE vehicle_images (id TEXT PRIMARY KEY, vehicle_id TEXT, storage_path TEXT)');
+$pdoStale->exec("INSERT INTO sync_runs (started_at, finished_at, ok) VALUES ('2020-01-01 00:00:00.000', NULL, 0)");
+$staleStatus = salgado_sync_build_status($pdoStale, false);
+check($staleStatus['running'] === false, 'una corrida colgada antigua sin flock no queda running=true');
+
+check(str_contains($wf, 'Accept-Language:'), 'workflow sync envía Accept-Language para ModSecurity');
+check(str_contains($dwf, 'Accept-Language:'), 'workflow deploy envía Accept-Language para ModSecurity');
+
 @unlink($cfg);
 putenv('SALGADO_CONFIG');
 

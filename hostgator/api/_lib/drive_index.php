@@ -226,17 +226,18 @@ function drive_index_save(PDO $pdo, array $nodes, string $rootId): void
     }
 }
 
-/** @return array{page_token: ?string, root_id: ?string, mode: string} */
+/** @return array{page_token: ?string, root_id: ?string, mode: string, indexed_at: ?string} */
 function drive_state_read(PDO $pdo): array
 {
-    $row = $pdo->query('SELECT page_token, root_id, mode FROM drive_sync_state WHERE id = 1')->fetch();
+    $row = $pdo->query('SELECT page_token, root_id, mode, indexed_at FROM drive_sync_state WHERE id = 1')->fetch();
     if (!$row) {
-        return ['page_token' => null, 'root_id' => null, 'mode' => ''];
+        return ['page_token' => null, 'root_id' => null, 'mode' => '', 'indexed_at' => null];
     }
     return [
         'page_token' => $row['page_token'] !== null ? (string) $row['page_token'] : null,
         'root_id' => $row['root_id'] !== null ? (string) $row['root_id'] : null,
         'mode' => (string) ($row['mode'] ?? ''),
+        'indexed_at' => $row['indexed_at'] !== null ? (string) $row['indexed_at'] : null,
     ];
 }
 
@@ -412,6 +413,22 @@ function drive_index_for_sync(PDO $pdo, string $rootId, array $options = []): ar
     };
 
     if (!drive_oauth_configured()) {
+        if ($dbOk && getenv('SALGADO_DRIVE_FORCE_INDEX') !== '1') {
+            try {
+                $st = drive_state_read($pdo);
+                $ts = !empty($st['indexed_at']) ? strtotime((string) $st['indexed_at'] . ' UTC') : false;
+                if (($st['root_id'] ?? null) === $rootId && $ts !== false && (time() - $ts) >= 0 && (time() - $ts) <= 900) {
+                    $cached = drive_index_load($pdo);
+                    if (count($cached) >= 50) {
+                        if (function_exists('logln')) {
+                            logln('Índice de Drive reutilizado (< 15 min): ' . count($cached) . ' entradas');
+                        }
+                        return ['nodes' => $cached, 'mode' => 'cached'];
+                    }
+                }
+            } catch (Throwable $e) {
+            }
+        }
         if (function_exists('logln')) {
             logln('changes.list inactivo: faltan drive_oauth_client_id, drive_oauth_client_secret y drive_oauth_refresh_token. Reindexado completo.');
         }

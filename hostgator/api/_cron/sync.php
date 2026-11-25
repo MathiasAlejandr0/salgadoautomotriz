@@ -1138,10 +1138,10 @@ function salgado_sync_unlock_approved(PDO $pdo, string $now): int
 
 function salgado_sync_photo_budget(): int
 {
-    $base = max(50, (int) cfg('sync_photo_budget', 400));
+    $base = max(40, (int) cfg('sync_photo_budget', 80));
     $full = getenv('SALGADO_SYNC_FULL') === '1'
         || in_array('--full', array_map('strval', $_SERVER['argv'] ?? []), true);
-    return $full ? max($base, 1200) : $base;
+    return $full ? max($base, 120) : $base;
 }
 
 function salgado_sync_save_report(PDO $pdo, array $report, string $now): void
@@ -1162,6 +1162,10 @@ function salgado_sync_save_report(PDO $pdo, array $report, string $now): void
 
 function salgado_sync_main(): int
 {
+@set_time_limit(0);
+@ignore_user_abort(true);
+@ini_set('memory_limit', '512M');
+
 $lock = fopen(salgado_sync_lock_path(), 'c');
 if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) {
     fwrite(STDOUT, "Ya hay un sync corriendo\n");
@@ -1171,6 +1175,30 @@ if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) {
 $pdo = db();
 $pdo->prepare('INSERT INTO sync_runs (started_at) VALUES (?)')->execute([now_db()]);
 $runId = (int) $pdo->lastInsertId();
+global $LOG;
+$finishedCleanly = false;
+register_shutdown_function(static function () use ($pdo, $runId, &$finishedCleanly, &$LOG, $lock): void {
+    if ($finishedCleanly) {
+        return;
+    }
+    $err = error_get_last();
+    $reason = is_array($err) && !empty($err['message'])
+        ? 'FATAL: ' . $err['message'] . ' (' . basename((string) ($err['file'] ?? '')) . ':' . ($err['line'] ?? 0) . ')'
+        : 'Proceso terminado antes de cerrar la corrida';
+    try {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $LOG[] = $reason;
+        $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 0, message = ?, log = ? WHERE id = ? AND finished_at IS NULL')
+            ->execute([now_db(), mb_substr($reason, 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);
+    } catch (Throwable $e) {
+    }
+    if ($lock) {
+        @flock($lock, LOCK_UN);
+        @fclose($lock);
+    }
+});
 
 try {
     salgado_sync_ensure_state_tables($pdo);
@@ -1288,6 +1316,7 @@ try {
     $deferredStocks = [];
     $driveExpected = [];
     $missingDriveFolder = [];
+    $downloadDeadline = microtime(true) + 270.0;
 
     foreach ($rows as $rank => $r) {
         $id = 'sa-' . $r['stockId'];
@@ -1312,6 +1341,9 @@ try {
         $images = [];
         $deferred = false;
         foreach ($r['photos'] as $fileId) {
+            if (microtime(true) >= $downloadDeadline) {
+                $budget = 0;
+            }
             $m = mirror_drive_photo($fileId, $budget);
             if ($m && $m[0] === 'deferred') {
                 $deferred = true;
@@ -1459,9 +1491,11 @@ try {
     logln('ERROR: ' . $e->getMessage());
     $pdo->prepare('UPDATE sync_runs SET finished_at = ?, ok = 0, message = ?, log = ? WHERE id = ?')
         ->execute([now_db(), mb_substr($e->getMessage(), 0, 500), mb_substr(implode("\n", $LOG), 0, 60000), $runId]);
+    $finishedCleanly = true;
     return 1;
 }
 
+    $finishedCleanly = true;
     return 0;
 }
 

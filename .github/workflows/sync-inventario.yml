@@ -15,7 +15,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Disparar y esperar el sync
         env:
@@ -23,6 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://salgadoautomotriz.cl"
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
           if [ -z "${SYNC_CRON_SECRET:-}" ]; then
             echo "Falta el secreto SYNC_CRON_SECRET en el repo."
             echo "Cárgalo en Settings > Secrets and variables > Actions."
@@ -33,21 +34,25 @@ jobs:
               --connect-timeout 20 --max-time 90 \
               -X POST \
               -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
-              -H "Accept: application/json" \
+              -H "Accept: */*" \
+              -H "Accept-Language: es-CL,es;q=0.9" \
+              -H "Content-Type: application/json" \
+              -H "User-Agent: ${UA}" \
+              -d '{}' \
               "$BASE/api/sync"
           }
           code=""
           attempt=1
-          while [ "$attempt" -le 3 ]; do
+          while [ "$attempt" -le 4 ]; do
             echo "Intento $attempt de POST /api/sync"
             set +e
             code=$(post)
             curl_ok=$?
             set -e
-            if [ "$curl_ok" -eq 0 ]; then
+            if [ "$curl_ok" -eq 0 ] && [ "$code" != "502" ] && [ "$code" != "503" ] && [ "$code" != "504" ]; then
               break
             fi
-            echo "Error de red (curl $curl_ok), reintento en 8s"
+            echo "HTTP=$code curl=$curl_ok, reintento en 8s"
             attempt=$((attempt + 1))
             sleep 8
           done
@@ -83,19 +88,22 @@ jobs:
             echo "Respuesta inesperada"
             exit 1
           fi
-          for i in $(seq 1 40); do
+          for i in $(seq 1 45); do
             sleep 15
             set +e
             scode=$(curl -sS -o /tmp/sync-status.json -w "%{http_code}" \
               --connect-timeout 20 --max-time 30 \
               -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
-              -H "Accept: application/json" \
+              -H "Accept: */*" \
+              -H "Accept-Language: es-CL,es;q=0.9" \
+              -H "User-Agent: ${UA}" \
               "$BASE/api/sync/status")
             set -e
             if [ "$scode" != "200" ]; then
               echo "status HTTP $scode, se reintenta"
               continue
             fi
+            set +e
             python3 - <<'PY'
           import json,sys
           d=json.load(open("/tmp/sync-status.json"))
@@ -106,6 +114,9 @@ jobs:
               d.get("locked_count"), d.get("incomplete_count"), run.get("message")))
           if d.get("running"):
               sys.exit(2)
+          if run and not run.get("finished_at"):
+              print("La corrida terminó sin cierre (posible timeout o muerte de proceso)")
+              sys.exit(3)
           if run.get("finished_at") and run.get("ok") is False:
               sys.exit(3)
           if run.get("finished_at"):
@@ -117,6 +128,7 @@ jobs:
           sys.exit(2)
           PY
             st=$?
+            set -e
             if [ "$st" -eq 0 ]; then
               echo "Sync terminó bien"
               exit 0
