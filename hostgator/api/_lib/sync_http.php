@@ -154,7 +154,7 @@ function salgado_sync_vehicle_photo_counts(PDO $pdo): array
              AND i.storage_path IS NOT NULL
              AND i.storage_path NOT LIKE '%placeholder%'
             WHERE v.published = 1
-              AND (v.archived_at IS NULL OR v.archived_at = '')
+              AND v.archived_at IS NULL
             GROUP BY v.id, v.stock_id, v.brand, v.model, v.year, v.source, v.photos_locked
             ORDER BY v.stock_id";
     try {
@@ -232,8 +232,13 @@ function salgado_sync_build_status(PDO $pdo, bool $withLog = false): array
         }
     }
 
-    $running = salgado_sync_is_running()
-        || ($run && ($run['finished_at'] ?? null) === null && !empty($run['started_at']));
+    $running = salgado_sync_is_running();
+    if (!$running && $run && ($run['finished_at'] ?? null) === null && !empty($run['started_at'])) {
+        $ts = strtotime((string) $run['started_at'] . ' UTC');
+        if ($ts !== false && (time() - $ts) >= 0 && (time() - $ts) <= 15) {
+            $running = true;
+        }
+    }
 
     return [
         'running' => $running,

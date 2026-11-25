@@ -131,72 +131,106 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://salgadoautomotriz.cl"
-          post() {
-            curl -sS -o /tmp/sync-post.json -w "%{http_code}" \
-              --connect-timeout 20 --max-time 90 \
-              -X POST \
-              -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
-              -H "Accept: application/json" \
-              "$BASE/api/sync?full=1"
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+          trigger_sync() {
+            local code=""
+            local attempt=1
+            while [ "$attempt" -le 4 ]; do
+              echo "Intento $attempt de POST /api/sync?full=1"
+              set +e
+              code=$(curl -sS -o /tmp/sync-post.json -w "%{http_code}" \
+                --connect-timeout 20 --max-time 90 \
+                -X POST \
+                -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
+                -H "Accept: */*" \
+                -H "Accept-Language: es-CL,es;q=0.9" \
+                -H "Content-Type: application/json" \
+                -H "User-Agent: ${UA}" \
+                -d '{"full":true}' \
+                "$BASE/api/sync?full=1")
+              curl_ok=$?
+              set -e
+              if [ "$curl_ok" -eq 0 ] && [ "$code" != "502" ] && [ "$code" != "503" ] && [ "$code" != "504" ]; then
+                break
+              fi
+              echo "HTTP=$code curl=$curl_ok, reintento en 10s"
+              attempt=$((attempt + 1))
+              sleep 10
+            done
+            echo "HTTP $code"
+            if [ "$code" != "202" ] && [ "$code" != "409" ]; then
+              cat /tmp/sync-post.json || true
+              exit 1
+            fi
           }
-          code=""
-          attempt=1
-          while [ "$attempt" -le 4 ]; do
-            echo "Intento $attempt de POST /api/sync?full=1"
-            set +e
-            code=$(post)
-            curl_ok=$?
-            set -e
-            if [ "$curl_ok" -eq 0 ] && [ "$code" != "502" ] && [ "$code" != "503" ] && [ "$code" != "504" ]; then
-              break
-            fi
-            echo "HTTP=$code curl=$curl_ok, reintento en 10s"
-            attempt=$((attempt + 1))
-            sleep 10
-          done
-          echo "HTTP $code"
-          if [ "$code" != "202" ] && [ "$code" != "409" ]; then
-            cat /tmp/sync-post.json || true
-            exit 1
-          fi
-          for i in $(seq 1 60); do
-            sleep 15
-            set +e
-            scode=$(curl -sS -o /tmp/sync-status.json -w "%{http_code}" \
-              --connect-timeout 20 --max-time 30 \
-              -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
-              -H "Accept: application/json" \
-              "$BASE/api/sync/status")
-            set -e
-            if [ "$scode" != "200" ]; then
-              echo "status HTTP $scode, se reintenta"
-              continue
-            fi
-            python3 - <<'PY'
+          wait_sync() {
+            for i in $(seq 1 60); do
+              sleep 15
+              set +e
+              scode=$(curl -sS -o /tmp/sync-status.json -w "%{http_code}" \
+                --connect-timeout 20 --max-time 30 \
+                -H "Authorization: Bearer ${SYNC_CRON_SECRET}" \
+                -H "Accept: */*" \
+                -H "Accept-Language: es-CL,es;q=0.9" \
+                -H "User-Agent: ${UA}" \
+                "$BASE/api/sync/status")
+              set -e
+              if [ "$scode" != "200" ]; then
+                echo "status HTTP $scode, se reintenta"
+                continue
+              fi
+              set +e
+              python3 - <<'PY'
           import json,sys
           d=json.load(open("/tmp/sync-status.json"))
           run=d.get("last_run") or {}
-          print("running={0} ok={1} finished={2} pub={3} sin_carpeta={4} bloqueados={5} incompletos={6} msg={7}".format(
+          def_stocks=d.get("deferred_stocks") or []
+          print("running={0} ok={1} finished={2} pub={3} sin_carpeta={4} bloqueados={5} incompletos={6} dif={7} msg={8}".format(
               d.get("running"), run.get("ok"), run.get("finished_at"),
               d.get("published"), d.get("missing_drive_folder_count"),
-              d.get("locked_count"), d.get("incomplete_count"), run.get("message")))
+              d.get("locked_count"), d.get("incomplete_count"), len(def_stocks), run.get("message")))
           if d.get("running"):
               sys.exit(2)
+          if run and not run.get("finished_at"):
+              print("La corrida terminó sin cierre (posible timeout o muerte de proceso)")
+              sys.exit(3)
           if run.get("finished_at") and run.get("ok") is False:
               sys.exit(3)
           if run.get("finished_at"):
-              sys.exit(0)
+              sys.exit(4 if def_stocks else 0)
           sys.exit(2)
           PY
-            st=$?
-            if [ "$st" -eq 0 ]; then
-              echo "Sync post-deploy completado"
+              st=$?
+              set -e
+              if [ "$st" -eq 0 ]; then
+                echo "Sync post-deploy completado sin pendientes"
+                return 0
+              fi
+              if [ "$st" -eq 4 ]; then
+                echo "Sync completado con lotes pendientes"
+                return 4
+              fi
+              if [ "$st" -eq 3 ]; then
+                echo "El sync post-deploy falló"
+                return 1
+              fi
+            done
+            echo "El sync sigue corriendo tras 15 minutos"
+            return 1
+          }
+          for pass in 1 2 3 4; do
+            echo "=== Pasada $pass de sync post-deploy ==="
+            trigger_sync
+            set +e
+            wait_sync
+            wst=$?
+            set -e
+            if [ "$wst" -eq 0 ]; then
               exit 0
             fi
-            if [ "$st" -eq 3 ]; then
-              echo "El sync post-deploy falló"
-              exit 1
+            if [ "$wst" -eq 4 ] && [ "$pass" -lt 4 ]; then
+              echo "Se dispara siguiente pasada para fotos diferidas"
+              continue
             fi
+            exit 1
           done
-          echo "El sync sigue corriendo tras 15 minutos"
-          exit 1
